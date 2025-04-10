@@ -1,0 +1,35 @@
+# Database files
+secure_storage.db
+secure_storage.db-shm
+secure_storage.db-wal
+
+# Log files
+*.log
+auth.log
+security.log
+file_operations.log
+
+# Security and keys
+security_keys.dat
+*.key
+
+# OTP and SMS data
+sms_logs/
+
+# Temporary files
+temp/
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Twilio configuration
+twilio_config.json 

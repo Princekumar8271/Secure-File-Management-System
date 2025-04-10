@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure File Management System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+    <div class="network-background">
+        <canvas id="network-canvas"></canvas>
+    </div>
+    
+    <div class="explanation-container">
+        <div class="explanation-content">
+            <h1>Secure File Management System</h1>
+            <p>Welcome to our state-of-the-art file management solution, designed with security at its core. Our system provides enterprise-grade protection while maintaining ease of use.</p>
+            <p>Experience seamless file organization with military-grade encryption, ensuring your data remains protected at all times.</p>
+            <ul>
+                <li><i class="fas fa-shield-alt"></i> End-to-end encryption for all files</li>
+                <li><i class="fas fa-lock"></i> Advanced access control mechanisms</li>
+                <li><i class="fas fa-history"></i> Complete audit trail and version control</li>
+                <li><i class="fas fa-key"></i> Multi-factor authentication support</li>
+            </ul>
+            <a href="{{ url_for('login') }}" class="login-button">Get Started <i class="fas fa-arrow-right"></i></a>
+        </div>
+        
+        <div class="security-features floating">
+            <h2>Security Features</h2>
+            <div class="shield-icon">
+                <i class="fas fa-shield-alt"></i>
+            </div>
+            <p>Hover to explore our security features</p>
+            
+            <!-- New glassmorphism container with additional explanation -->
+            <div class="features-detail-container">
+                <div class="feature-detail">
+                    <i class="fas fa-lock"></i>
+                    <h3>Advanced Encryption</h3>
+                    <p>Military-grade AES-256 encryption ensures your files remain secure against unauthorized access.</p>
+                </div>
+                <div class="feature-detail">
+                    <i class="fas fa-user-shield"></i>
+                    <h3>Access Control</h3>
+                    <p>Granular permissions system allows you to control who can view, edit, or share your files.</p>
+                </div>
+                <div class="feature-detail">
+                    <i class="fas fa-history"></i>
+                    <h3>Version Control</h3>
+                    <p>Track changes with comprehensive version history and restore previous versions when needed.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/network-animation.js') }}"></script>
+</body>
+</html>

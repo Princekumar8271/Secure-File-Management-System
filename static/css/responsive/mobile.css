@@ -1,0 +1,41 @@
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+    .container {
+        width: 100%;
+        padding: 1rem;
+    }
+    
+    .navbar {
+        flex-direction: column;
+        padding: 0.8rem;
+    }
+    
+    .navbar-brand {
+        margin-bottom: 0.5rem;
+    }
+    
+    .navbar-nav {
+        flex-direction: column;
+        width: 100%;
+        gap: 0.5rem;
+    }
+    
+    .auth-container {
+        width: 90%;
+        max-width: none;
+    }
+    
+    .files-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .file-actions {
+        flex-direction: column;
+    }
+    
+    .btn {
+        width: 100%;
+        margin: 0.2rem 0;
+    }
+}

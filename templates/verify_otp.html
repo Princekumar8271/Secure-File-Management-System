@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Verify OTP - Secure File Manager{% endblock %}
+
+{% block content %}
+<div class="auth-container enhanced">
+    <h2>Verify OTP</h2>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <p class="info-text">
+        A one-time verification code has been sent to your registered phone number.
+        Please enter the code below to continue.
+    </p>
+    
+    <div class="dev-note">
+        <p><strong>Development Mode Note:</strong> If you can't receive the OTP, you can:</p>
+        <ol class="dev-instructions">
+            <li>Check the server console for a message between === lines</li>
+            <li>Look in the 'sms_logs' folder for a file named 'sms_{{ username }}.txt'</li>
+            <li>Run the command: <code>python get_otp.py {{ username }}</code></li>
+        </ol>
+    </div>
+    
+    <form method="post" action="{{ url_for('verify_otp', username=username) }}">
+        <div class="form-group">
+            <label for="otp">One-Time Password</label>
+            <i class="fas fa-key form-group-icon"></i>
+            <input type="text" id="otp" name="otp" required maxlength="6" pattern="[0-9]{6}" placeholder="6-digit code">
+        </div>
+        <div class="otp-timer">
+            <span id="timer">10:00</span> remaining
+        </div>
+        <button type="submit" class="glow-button">Verify OTP</button>
+    </form>
+    
+    <div class="auth-links">
+        <p>
+            <a href="{{ url_for('forgot_password') }}"><i class="fas fa-redo"></i> Request New Code</a>
+            |
+            <a href="{{ url_for('login') }}"><i class="fas fa-arrow-left"></i> Back to Login</a>
+        </p>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+    // Countdown timer for OTP expiration
+    document.addEventListener('DOMContentLoaded', function() {
+        let timeLeft = 10 * 60; // 10 minutes in seconds
+        const timerElement = document.getElementById('timer');
+        
+        const countdown = setInterval(function() {
+            if (timeLeft <= 0) {
+                clearInterval(countdown);
+                timerElement.textContent = "Expired";
+                // Disable the verify button
+                document.querySelector('button[type="submit"]').disabled = true;
+                return;
+            }
+            
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            timerElement.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+            timeLeft--;
+        }, 1000);
+    });
+</script>
+{% endblock %}
+{% endblock %} 

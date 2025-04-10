@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Share File - {{ filename }}{% endblock %}
+
+{% block content %}
+<div class="share-container">
+    <h2>Share File: {{ filename }}</h2>
+    
+    <div class="share-panel">
+        <div class="share-form-container">
+            <h3>Share with a User</h3>
+            <form action="{{ url_for('share_file', file_id=file_id) }}" method="POST" class="share-form">
+                <div class="form-group">
+                    <label for="username">Select User:</label>
+                    <select name="username" id="username" required>
+                        <option value="">-- Select a user --</option>
+                        {% for username in available_users %}
+                        <option value="{{ username }}">{{ username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="permission">Permission Level:</label>
+                    <select name="permission" id="permission">
+                        <option value="read">Read Only</option>
+                        <option value="write">Read & Write</option>
+                        <option value="admin">Admin (Can Share)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="expiry">Expires After (Days):</label>
+                    <input type="number" name="expiry" id="expiry" placeholder="Never expires if empty" min="1" max="365">
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Share File</button>
+            </form>
+        </div>
+        
+        <div class="shared-users-container">
+            <h3>Currently Shared With</h3>
+            
+            {% if shared_users %}
+            <table class="shared-users-table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Permission</th>
+                        <th>Granted</th>
+                        <th>Expires</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in shared_users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>
+                            <span class="permission-badge permission-{{ user.permission }}">
+                                {{ user.permission|capitalize }}
+                            </span>
+                        </td>
+                        <td>{{ user.granted_at }}</td>
+                        <td>{{ user.expires_at }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="no-shared-users">This file is not shared with anyone yet.</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="action-buttons">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Add any client-side validation if needed
+    document.addEventListener('DOMContentLoaded', function() {
+        // Example: validate form before submission
+        const shareForm = document.querySelector('.share-form');
+        if (shareForm) {
+            shareForm.addEventListener('submit', function(e) {
+                const username = document.getElementById('username').value;
+                if (!username) {
+                    e.preventDefault();
+                    alert('Please select a user to share with');
+                }
+            });
+        }
+    });
+</script>
+{% endblock %} 
