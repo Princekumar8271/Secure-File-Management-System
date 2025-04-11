@@ -590,99 +590,28 @@ def reset_password(username):
     return render_template('reset_password.html', username=username)
 
 if __name__ == '__main__':
-    # Create required directories
+    # Create necessary directories
     os.makedirs('temp', exist_ok=True)
-    os.makedirs('static/css/responsive', exist_ok=True)
-    os.makedirs('sms_logs', exist_ok=True)  # Always create the sms_logs directory
+    os.makedirs('static/css', exist_ok=True)
     
-    # Load or create SMS/Twilio configuration
-    twilio_config_path = os.path.join(os.path.dirname(__file__), 'twilio_config.json')
-    if not os.path.exists(twilio_config_path):
-        # No configuration exists, create a default one for direct SMS
-        try:
-            import json
-            default_config = {
-                'sms_backend': 'direct',
-                'created_at': datetime.now().isoformat(),
-                'note': 'Automatically created default configuration'
-            }
-            with open(twilio_config_path, 'w') as config_file:
-                json.dump(default_config, config_file, indent=4)
-            print("Created default SMS configuration (direct mode)")
-            # Set environment variable
-            os.environ['SMS_BACKEND'] = 'direct'
-        except Exception as e:
-            print(f"Error creating default SMS config: {str(e)}")
-    else:
-        # Load existing configuration
-        try:
-            import json
-            with open(twilio_config_path, 'r') as config_file:
-                config = json.load(config_file)
-                
-                # Set SMS backend
-                os.environ['SMS_BACKEND'] = config.get('sms_backend', 'twilio')
-                
-                # Set Twilio credentials if using Twilio backend
-                if config.get('sms_backend') == 'twilio':
-                    os.environ['TWILIO_ACCOUNT_SID'] = config.get('account_sid', '')
-                    os.environ['TWILIO_AUTH_TOKEN'] = config.get('auth_token', '')
-                    os.environ['TWILIO_PHONE_NUMBER'] = config.get('phone_number', '')
-                    print(f"Loaded Twilio configuration from twilio_config.json")
-                else:
-                    print(f"Using {config.get('sms_backend')} SMS backend from twilio_config.json")
-        except Exception as e:
-            print(f"Error loading SMS config: {str(e)}")
-            # Set a fallback direct mode
-            os.environ['SMS_BACKEND'] = 'direct'
-            print("Using fallback direct SMS mode due to configuration error")
-    
-    # Create a responsive CSS file if it doesn't exist
-    responsive_css_path = 'static/css/responsive/mobile.css'
-    if not os.path.exists(responsive_css_path):
-        with open(responsive_css_path, 'w') as f:
+    # Generate responsive CSS if it doesn't exist
+    css_path = 'static/css/responsive.css'
+    if not os.path.exists(css_path):
+        with open(css_path, 'w') as f:
             f.write("""
-/* Mobile Responsive Styles */
-@media (max-width: 768px) {
-    .container {
-        width: 100%;
-        padding: 1rem;
-    }
+            @media (max-width: 768px) {
+                .container { padding: 10px; }
+                .card { margin: 10px 0; }
+                .btn { width: 100%; margin: 5px 0; }
+                table { font-size: 12px; }
+                th, td { padding: 5px; }
+            }
+            """)
     
-    .navbar {
-        flex-direction: column;
-        padding: 0.8rem;
-    }
+    # Open browser only if not already opened
+    if not os.environ.get('BROWSER_OPENED'):
+        os.environ['BROWSER_OPENED'] = '1'
+        webbrowser.open('http://127.0.0.1:5000')
     
-    .navbar-brand {
-        margin-bottom: 0.5rem;
-    }
-    
-    .navbar-nav {
-        flex-direction: column;
-        width: 100%;
-        gap: 0.5rem;
-    }
-    
-    .auth-container {
-        width: 90%;
-        max-width: none;
-    }
-    
-    .files-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .file-actions {
-        flex-direction: column;
-    }
-    
-    .btn {
-        width: 100%;
-        margin: 0.2rem 0;
-    }
-}
-""")
-    
-    webbrowser.open('http://127.0.0.1:5000')  # Opens default browser
+    # Run the app
     app.run(debug=True)
