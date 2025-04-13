@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100" height="100">
+  <!-- Security Features Icon -->
+  <defs>
+    <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff1a30" stop-opacity="1" />
+      <stop offset="100%" stop-color="#ff5a25" stop-opacity="1" />
+    </linearGradient>
+    <filter id="glow2" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  
+  <!-- Shield Background -->
+  <path d="M256 16L32 96v144c0 124.1 88.1 234.6 224 260.9 135.9-26.3 224-136.8 224-260.9V96L256 16z" 
+        fill="url(#gradient2)" filter="url(#glow2)" />
+  
+  <!-- Lock Icon -->
+  <circle cx="256" cy="256" r="80" fill="#1e283c" />
+  <rect x="224" y="216" width="64" height="80" rx="32" fill="#1e283c" />
+  
+  <!-- Lock Details -->
+  <circle cx="256" cy="256" r="32" fill="#2a3950" />
+  <rect x="248" y="256" width="16" height="32" fill="#2a3950" />
+  
+  <!-- Key Hole -->
+  <circle cx="256" cy="256" r="16" fill="#00e5ff" opacity="0.7" />
+  <rect x="252" y="256" width="8" height="16" fill="#00e5ff" opacity="0.7" />
+  
+  <!-- Security Rays -->
+  <path d="M256 176v-32" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+  <path d="M256 368v-32" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+  <path d="M176 256h-32" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+  <path d="M368 256h-32" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+  
+  <path d="M195 195l-22-22" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+  <path d="M339 339l-22-22" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+  <path d="M195 317l-22 22" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+  <path d="M339 173l-22 22" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+</svg>

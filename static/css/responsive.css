@@ -1,9 +1,0 @@
-
-            @media (max-width: 768px) {
-                .container { padding: 10px; }
-                .card { margin: 10px 0; }
-                .btn { width: 100%; margin: 5px 0; }
-                table { font-size: 12px; }
-                th, td { padding: 5px; }
-            }
-            

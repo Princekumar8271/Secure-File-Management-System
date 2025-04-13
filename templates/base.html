@@ -18,11 +18,26 @@
         <div class="container">
             <a href="{{ url_for('index') }}" class="navbar-brand">Secure File Manager</a>
             <ul class="navbar-nav">
-                <li><a href="{{ url_for('dashboard') }}"><i class="fas fa-home"></i> Home</a></li>
-                <li><a href="{{ url_for('dashboard') }}"><i class="fas fa-file"></i> Files</a></li>
-                <li><a href="#"><i class="fas fa-user"></i> User</a></li>
-                <li><a href="#"><i class="fas fa-cog"></i> Settings</a></li>
-                <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                <li><a href="{{ url_for('index') }}"><i class="fas fa-home"></i> Home</a></li>
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle"><i class="fas fa-file"></i> Files <i class="fas fa-caret-down"></i></a>
+                    <ul class="dropdown-menu">
+                        <li><a href="{{ url_for('dashboard') }}"><i class="fas fa-folder"></i> My Files</a></li>
+                        <li><a href="{{ url_for('shared_files') }}"><i class="fas fa-share-alt"></i> Shared With Me</a></li>
+                    </ul>
+                </li>
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle"><i class="fas fa-user"></i> User <i class="fas fa-caret-down"></i></a>
+                    <ul class="dropdown-menu">
+                        <li><a href="{{ url_for('user_profile') }}"><i class="fas fa-user-circle"></i> Profile Overview</a></li>
+                        <li><a href="{{ url_for('dashboard') }}"><i class="fas fa-folder"></i> My Files</a></li>
+                        <li><a href="{{ url_for('shared_files') }}"><i class="fas fa-share-alt"></i> Shared Files</a></li>
+                        <li><a href="{{ url_for('activity_log') }}"><i class="fas fa-history"></i> Activity Log</a></li>
+                        <li class="divider"></li>
+                        <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                    </ul>
+                </li>
+                <li><a href="{{ url_for('settings') }}"><i class="fas fa-cog"></i> Settings</a></li>
             </ul>
         </div>
     </nav>

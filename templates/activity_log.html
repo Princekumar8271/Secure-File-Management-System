@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}Activity Log - Secure File Manager{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="bg-slate-800/80 backdrop-blur-lg rounded-2xl shadow-xl p-6 space-y-8">
+        <!-- Header Section -->
+        <div class="text-center pb-6 border-b border-slate-700">
+            <h2 class="flex items-center justify-center text-3xl font-semibold text-white gap-2">
+                <i class="fas fa-history"></i>
+                Activity Log
+            </h2>
+            <p class="mt-2 text-slate-400 text-lg">Track and monitor all your file activities</p>
+        </div>
+
+        <!-- Filters Section -->
+        <div class="bg-slate-900/50 backdrop-blur-md rounded-xl p-6 border border-slate-700/50">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Action Type Filter -->
+                <div class="space-y-2">
+                    <label for="action-filter" class="flex items-center text-white font-medium gap-2">
+                        <i class="fas fa-filter text-blue-500"></i>
+                        Action Type
+                    </label>
+                    <select id="action-filter" class="w-full bg-slate-800/80 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="all">All Actions</option>
+                        <option value="upload">Upload</option>
+                        <option value="download">Download</option>
+                        <option value="share">Share</option>
+                        <option value="delete">Delete</option>
+                    </select>
+                </div>
+
+                <!-- Time Range Filter -->
+                <div class="space-y-2">
+                    <label for="date-filter" class="flex items-center text-white font-medium gap-2">
+                        <i class="fas fa-calendar text-blue-500"></i>
+                        Time Range
+                    </label>
+                    <select id="date-filter" class="w-full bg-slate-800/80 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="7">Last 7 Days</option>
+                        <option value="30">Last 30 Days</option>
+                        <option value="90">Last 90 Days</option>
+                        <option value="all">All Time</option>
+                    </select>
+                </div>
+
+                <!-- Status Filter -->
+                <div class="space-y-2">
+                    <label for="status-filter" class="flex items-center text-white font-medium gap-2">
+                        <i class="fas fa-check-circle text-blue-500"></i>
+                        Status
+                    </label>
+                    <select id="status-filter" class="w-full bg-slate-800/80 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="all">All Statuses</option>
+                        <option value="success">Success</option>
+                        <option value="failed">Failed</option>
+                        <option value="pending">Pending</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table Section -->
+        <div class="bg-slate-900/50 backdrop-blur-md rounded-xl p-6 border border-slate-700/50 overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="text-left text-slate-400 text-sm uppercase tracking-wider">
+                        <th class="px-6 py-4">Action</th>
+                        <th class="px-6 py-4">Resource</th>
+                        <th class="px-6 py-4">Timestamp</th>
+                        <th class="px-6 py-4">Status</th>
+                        <th class="px-6 py-4">Details</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-700/50">
+                    {% for activity in activities %}
+                    <tr class="group hover:-translate-y-0.5 transition-transform duration-200"
+                        data-action="{{ activity.action }}"
+                        data-status="{{ activity.status }}"
+                        data-timestamp="{{ activity.timestamp }}">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 flex items-center justify-center bg-blue-500/10 rounded-lg">
+                                    {% if activity.action == 'upload' %}
+                                        <i class="fas fa-upload text-blue-500"></i>
+                                    {% elif activity.action == 'download' %}
+                                        <i class="fas fa-download text-blue-500"></i>
+                                    {% elif activity.action == 'share' %}
+                                        <i class="fas fa-share-alt text-blue-500"></i>
+                                    {% elif activity.action == 'delete' %}
+                                        <i class="fas fa-trash text-blue-500"></i>
+                                    {% else %}
+                                        <i class="fas fa-info-circle text-blue-500"></i>
+                                    {% endif %}
+                                </div>
+                                <span class="text-white font-medium">{{ activity.action|capitalize }}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <i class="fas fa-file text-slate-400"></i>
+                                <span class="text-slate-400 font-mono text-sm">{{ activity.resource_id }}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <i class="fas fa-clock text-slate-400"></i>
+                                <span class="text-slate-400">{{ activity.timestamp }}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium
+                                {% if activity.status == 'success' %}
+                                    bg-green-500/10 text-green-500
+                                {% elif activity.status == 'failed' %}
+                                    bg-red-500/10 text-red-500
+                                {% else %}
+                                    bg-yellow-500/10 text-yellow-500
+                                {% endif %}">
+                                <i class="fas fa-circle text-xs"></i>
+                                {{ activity.status|capitalize }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <button onclick="showDetails('{{ activity.details|tojson|safe }}')"
+                                    class="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium
+                                           bg-blue-500/10 text-blue-500 border border-blue-500/20
+                                           hover:bg-blue-500/20 transition-colors duration-200">
+                                <i class="fas fa-info-circle"></i>
+                                Details
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Details Modal -->
+    <div id="details-modal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+            <div class="fixed inset-0 transition-opacity" aria-hidden="true">
+                <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+            </div>
+            <div class="bg-slate-800/90 backdrop-blur-xl rounded-2xl overflow-hidden shadow-xl transform transition-all sm:max-w-2xl sm:w-full">
+                <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+                    <h3 class="text-xl font-semibold text-white flex items-center gap-2">
+                        <i class="fas fa-info-circle text-blue-500"></i>
+                        Activity Details
+                    </h3>
+                    <button class="close text-slate-400 hover:text-red-500 transition-colors">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
+                <div id="details-content" class="p-6">
+                    <pre class="bg-slate-900/50 rounded-lg p-4 text-slate-300 font-mono text-sm overflow-x-auto border border-slate-700/50"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const actionFilter = document.getElementById('action-filter');
+    const dateFilter = document.getElementById('date-filter');
+    const statusFilter = document.getElementById('status-filter');
+    const activityRows = document.querySelectorAll('tbody tr');
+    
+    function applyFilters() {
+        const selectedAction = actionFilter.value;
+        const selectedStatus = statusFilter.value;
+        const selectedDays = parseInt(dateFilter.value);
+        const currentDate = new Date();
+        
+        activityRows.forEach(row => {
+            const action = row.dataset.action;
+            const status = row.dataset.status;
+            const timestamp = new Date(row.dataset.timestamp);
+            
+            const actionMatch = selectedAction === 'all' || action === selectedAction;
+            const statusMatch = selectedStatus === 'all' || status === selectedStatus;
+            
+            let dateMatch = true;
+            if (selectedDays !== 'all') {
+                const daysDiff = (currentDate - timestamp) / (1000 * 60 * 60 * 24);
+                dateMatch = daysDiff <= selectedDays;
+            }
+            
+            row.classList.toggle('hidden', !(actionMatch && statusMatch && dateMatch));
+        });
+    }
+    
+    actionFilter.addEventListener('change', applyFilters);
+    dateFilter.addEventListener('change', applyFilters);
+    statusFilter.addEventListener('change', applyFilters);
+});
+
+// Modal functionality
+const modal = document.getElementById('details-modal');
+const closeBtn = document.querySelector('.close');
+
+function showDetails(details) {
+    const detailsContent = document.getElementById('details-content').querySelector('pre');
+    const parsedDetails = typeof details === 'string' ? JSON.parse(details) : details;
+    detailsContent.textContent = JSON.stringify(parsedDetails, null, 2);
+    modal.classList.remove('hidden');
+    
+    // Add animation classes
+    modal.querySelector('.bg-slate-800/90').classList.add('animate-fade-in');
+}
+
+closeBtn.onclick = function() {
+    modal.classList.add('hidden');
+}
+
+window.onclick = function(event) {
+    if (event.target === modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+// Add fade-in animation for rows
+document.addEventListener('DOMContentLoaded', function() {
+    const rows = document.querySelectorAll('tbody tr');
+    rows.forEach((row, index) => {
+        row.style.opacity = '0';
+        row.style.transform = 'translateY(10px)';
+        
+        setTimeout(() => {
+            row.style.opacity = '1';
+            row.style.transform = 'translateY(0)';
+            row.style.transition = 'all 0.3s ease';
+        }, index * 50);
+    });
+});
+</script>
+{% endblock %} 
