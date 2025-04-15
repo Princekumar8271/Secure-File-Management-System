@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Face Verification - SecureVault{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center">
+    <div class="flex flex-col items-center justify-center text-center px-4">
+        <div class="icon-container mb-4">
+            <i class="fas fa-user-circle text-5xl text-red-400"></i>
+        </div>
+        
+        <h1 class="text-3xl font-bold mb-6 text-red-400">Face Login</h1>
+        
+        <!-- Single gradient line -->
+        <div class="w-64 h-0.5 bg-gradient-to-r from-red-500 to-orange-400 rounded mb-10"></div>
+        
+        <div class="text-gray-300 text-sm mb-6">
+            <p>Please wait while we securely process your face data</p>
+        </div>
+        
+        <!-- Loading animation -->
+        <div class="flex space-x-2 mb-8">
+            <div class="w-3 h-3 bg-red-500 rounded-full animate-bounce"></div>
+            <div class="w-3 h-3 bg-red-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+            <div class="w-3 h-3 bg-red-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

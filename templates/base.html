@@ -2,52 +2,456 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    {{ viewport_meta|safe }}
-    <title>{% block title %}Secure File Manager{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Secure File Encryption{% endblock %}</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive/mobile.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/1.6.4/flowbite.min.js"></script>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/favicon.ico') }}">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            200: '#bae6fd',
+                            300: '#7dd3fc',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                        },
+                    },
+                    fontFamily: {
+                        sans: ['Segoe UI', 'Tahoma', 'Geneva', 'Verdana', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Background and animation styles */
+        body {
+            background: #050a14;
+            position: relative;
+            overflow-x: hidden;
+            color: #fff;
+        }
+        
+        /* Navbar styles */
+        .navbar {
+            background-color: rgba(13, 22, 40, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        
+        .navbar-brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #e05d44, #ff3366);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 0 15px rgba(255, 51, 102, 0.5);
+            transition: all 0.3s ease;
+        }
+        
+        .navbar-brand:hover {
+            text-shadow: 0 0 20px rgba(255, 51, 102, 0.8);
+            transform: scale(1.02);
+        }
+        
+        .nav-link {
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin: 0 10px;
+            padding: 8px 16px;
+            border-radius: 6px;
+        }
+        
+        .nav-link:hover {
+            color: #fff;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .nav-link.active {
+            background-color: rgba(255, 255, 255, 0.15);
+            color: #fff;
+        }
+        
+        .nav-settings {
+            background-color: rgba(96, 165, 250, 0.1);
+            border: 1px solid rgba(96, 165, 250, 0.3);
+            color: #60a5fa;
+            font-weight: 500;
+            padding: 8px 20px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-settings:hover {
+            background-color: rgba(96, 165, 250, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .eye-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("{{ url_for('static', filename='images/Eye.jpg') }}");
+            background-size: cover;
+            background-position: center;
+            z-index: -2;
+            filter: brightness(0.6) contrast(1.2) blur(2px);
+            animation: eyePulse 10s infinite alternate;
+            transform: scale(1.05);
+            transition: all 0.5s ease;
+        }
+        
+        @keyframes eyePulse {
+            0% {
+                filter: brightness(0.6) contrast(1.2) blur(2px) hue-rotate(0deg);
+                transform: scale(1.05);
+            }
+            25% {
+                filter: brightness(0.65) contrast(1.25) blur(3px) hue-rotate(15deg);
+                transform: scale(1.06);
+            }
+            50% {
+                filter: brightness(0.7) contrast(1.3) blur(2.5px) hue-rotate(30deg);
+                transform: scale(1.07);
+            }
+            75% {
+                filter: brightness(0.65) contrast(1.25) blur(2px) hue-rotate(15deg);
+                transform: scale(1.06);
+            }
+            100% {
+                filter: brightness(0.6) contrast(1.2) blur(3px) hue-rotate(-10deg);
+                transform: scale(1.05);
+            }
+        }
+        
+        .cyber-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(90deg, rgba(255,0,0,0.05) 1px, transparent 1px),
+                linear-gradient(rgba(255,0,0,0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+            z-index: -1;
+            opacity: 0.2;
+            mix-blend-mode: soft-light;
+            animation: gridFlow 30s linear infinite;
+        }
+        
+        /* Add a second overlapping grid for depth effect */
+        .cyber-overlay::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(45deg, rgba(255,0,0,0.03) 1px, transparent 1px),
+                linear-gradient(135deg, rgba(255,0,0,0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            opacity: 0.8;
+            animation: gridFlow2 25s linear infinite;
+        }
+        
+        .network-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+        
+        #network-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.75;
+            mix-blend-mode: screen;
+            filter: blur(1px);
+        }
+        
+        /* Enhanced Glassmorphism effects for all pages */
+        .glass-card {
+            background: rgba(0, 0, 0, 0.7);
+            box-shadow: 0 8px 32px 0 rgba(255, 30, 86, 0.2);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 30, 86, 0.1);
+            transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -50%;
+            width: 150%;
+            height: 100%;
+            background: linear-gradient(
+                90deg, 
+                transparent, 
+                rgba(255, 255, 255, 0.05), 
+                transparent
+            );
+            transform: skewX(-15deg);
+            transition: 0.5s;
+            z-index: -1;
+        }
+        
+        .glass-card:hover {
+            box-shadow: 0 12px 40px 0 rgba(255, 30, 86, 0.4), 0 0 20px rgba(255, 30, 86, 0.2) inset;
+            border: 1px solid rgba(255, 30, 86, 0.2);
+            transform: translateY(-5px) scale(1.02);
+        }
+        
+        .glass-card:hover::before {
+            left: 100%;
+        }
+        
+        .glass-inner {
+            background: rgba(0, 0, 0, 0.6);
+            box-shadow: 0 8px 32px 0 rgba(255, 30, 86, 0.15);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 30, 86, 0.1);
+            transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .glass-inner:hover {
+            box-shadow: 0 8px 32px 0 rgba(255, 30, 86, 0.25), 0 0 15px rgba(255, 30, 86, 0.15) inset;
+            border: 1px solid rgba(255, 30, 86, 0.2);
+            transform: translateY(-3px) scale(1.01);
+        }
+        
+        /* Text enhancements for better visibility */
+        .glass-card h2, .glass-card h3, .glass-inner h3 {
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+            background: linear-gradient(120deg, #ffffff, #c0c0c0);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            position: relative;
+        }
+        
+        .glass-card p, .glass-inner p {
+            text-shadow: 0 0 2px rgba(255, 255, 255, 0.15);
+            font-weight: 400;
+            position: relative;
+        }
+        
+        /* Colored border glow effect */
+        .glass-card.blue-glow {
+            box-shadow: 0 8px 32px 0 rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.1);
+        }
+        
+        .glass-card.blue-glow:hover {
+            box-shadow: 0 12px 40px 0 rgba(59, 130, 246, 0.4), 0 0 20px rgba(59, 130, 246, 0.2) inset;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+        
+        .glass-card.green-glow {
+            box-shadow: 0 8px 32px 0 rgba(74, 222, 128, 0.2);
+            border: 1px solid rgba(74, 222, 128, 0.1);
+        }
+        
+        .glass-card.green-glow:hover {
+            box-shadow: 0 12px 40px 0 rgba(74, 222, 128, 0.4), 0 0 20px rgba(74, 222, 128, 0.2) inset;
+            border: 1px solid rgba(74, 222, 128, 0.2);
+        }
+        
+        /* Floating animation */
+        @keyframes float {
+            0% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-15px);
+            }
+            100% {
+                transform: translateY(0px);
+            }
+        }
+        
+        .animate-float {
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        @keyframes gridFlow {
+            0% {
+                background-position: 0 0;
+            }
+            100% {
+                background-position: 40px 40px;
+            }
+        }
+        
+        @keyframes gridFlow2 {
+            0% {
+                background-position: 0 0;
+            }
+            100% {
+                background-position: 60px 60px;
+            }
+        }
+        
+        /* Global loading overlay */
+        #global-loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        
+        #global-loading.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #ff4c4c;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        .loading-text {
+            margin-top: 15px;
+            color: #fff;
+            font-size: 16px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Disable page swiping while preserving scroll */
+        html, body {
+            overscroll-behavior: none;
+            touch-action: pan-y;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body class="bg-[#121212] text-gray-100 min-h-screen">
+    <!-- Loading overlay will be created by loading.js -->
+    
+    <div class="eye-background"></div>
+    <div class="cyber-overlay"></div>
     <div class="network-background">
         <canvas id="network-canvas"></canvas>
     </div>
     
-    <nav class="navbar">
-        <div class="container">
-            <a href="{{ url_for('index') }}" class="navbar-brand">Secure File Manager</a>
-            <ul class="navbar-nav">
-                <li><a href="{{ url_for('index') }}"><i class="fas fa-home"></i> Home</a></li>
-                <li class="dropdown">
-                    <a href="#" class="dropdown-toggle"><i class="fas fa-file"></i> Files <i class="fas fa-caret-down"></i></a>
-                    <ul class="dropdown-menu">
-                        <li><a href="{{ url_for('dashboard') }}"><i class="fas fa-folder"></i> My Files</a></li>
-                        <li><a href="{{ url_for('shared_files') }}"><i class="fas fa-share-alt"></i> Shared With Me</a></li>
+    {% if request.path != url_for('index') %}
+    <nav class="navbar py-3 px-4">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-lock me-2"></i> Secure File Manager
+            </a>
+            
+            <div class="d-flex align-items-center">
+                <a href="{{ url_for('index') }}" class="nav-link mx-2 {% if request.path == url_for('index') %}active{% endif %}">
+                    <i class="fas fa-home me-2"></i> Home
+                </a>
+                
+                {% if 'token' in session %}
+                <div class="dropdown mx-2">
+                    <a href="#" class="nav-link dropdown-toggle d-flex align-items-center" id="filesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-file me-2"></i> Files <i class="fas fa-caret-down ms-1"></i>
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="filesDropdown">
+                        <li><a class="dropdown-item" href="{{ url_for('dashboard') }}"><i class="fas fa-folder me-2"></i>My Files</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('shared_files') }}"><i class="fas fa-share-alt me-2"></i>Shared Files</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{{ url_for('activity_log') }}"><i class="fas fa-history me-2"></i>Activity Log</a></li>
                     </ul>
-                </li>
-                <li class="dropdown">
-                    <a href="#" class="dropdown-toggle"><i class="fas fa-user"></i> User <i class="fas fa-caret-down"></i></a>
-                    <ul class="dropdown-menu">
-                        <li><a href="{{ url_for('user_profile') }}"><i class="fas fa-user-circle"></i> Profile Overview</a></li>
-                        <li><a href="{{ url_for('dashboard') }}"><i class="fas fa-folder"></i> My Files</a></li>
-                        <li><a href="{{ url_for('shared_files') }}"><i class="fas fa-share-alt"></i> Shared Files</a></li>
-                        <li><a href="{{ url_for('activity_log') }}"><i class="fas fa-history"></i> Activity Log</a></li>
-                        <li class="divider"></li>
-                        <li><a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                </div>
+                
+                <div class="dropdown mx-2">
+                    <a href="#" class="nav-link dropdown-toggle d-flex align-items-center" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-user me-2"></i> Account <i class="fas fa-caret-down ms-1"></i>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li><a class="dropdown-item" href="{{ url_for('user_profile') }}"><i class="fas fa-id-card me-2"></i>Profile</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('settings') }}"><i class="fas fa-cog me-2"></i>Settings</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
                     </ul>
-                </li>
-                <li><a href="{{ url_for('settings') }}"><i class="fas fa-cog"></i> Settings</a></li>
-            </ul>
+                </div>
+                {% else %}
+                <a href="{{ url_for('login') }}" class="nav-link mx-2">
+                    <i class="fas fa-sign-in-alt me-2"></i> Login
+                </a>
+                <a href="{{ url_for('register') }}" class="nav-link mx-2">
+                    <i class="fas fa-user-plus me-2"></i> Register
+                </a>
+                {% endif %}
+            </div>
         </div>
     </nav>
+    {% else %}
+    <!-- No navbar on homepage -->
+    {% endif %}
+    
+    <!-- Notification Container -->
+    <div id="notification-container" class="fixed w-full z-[1001] flex justify-center pointer-events-none mt-2"></div>
     
     <div class="{% if request.endpoint in ['login', 'register'] %}content-no-container{% else %}container{% endif %}">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                <div class="flash-messages">
+                <div class="flash-messages" style="display: none;">
                     {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                        <div class="alert alert-{{ category }}" data-message="{{ message }}" data-category="{{ category }}"></div>
                     {% endfor %}
                 </div>
             {% endif %}
@@ -56,7 +460,210 @@
         {% block content %}{% endblock %}
     </div>
     
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-4"></div>
+    
     <script src="{{ url_for('static', filename='js/network-animation.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/loading.js') }}"></script>
     {% block scripts %}{% endblock %}
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize all dropdowns
+        var dropdowns = document.querySelectorAll('.dropdown-toggle');
+        var dropdownInstances = [];
+        
+        dropdowns.forEach(function(dropdownToggle) {
+            var dropdown = new bootstrap.Dropdown(dropdownToggle);
+            dropdownInstances.push(dropdown);
+            
+            // Get the parent dropdown container
+            var dropdownContainer = dropdownToggle.closest('.dropdown');
+            
+            // On larger screens, add hover behavior
+            if (window.innerWidth >= 992) {
+                dropdownContainer.addEventListener('mouseenter', function() {
+                    dropdown.show();
+                });
+                
+                dropdownContainer.addEventListener('mouseleave', function() {
+                    dropdown.hide();
+                });
+            }
+            
+            // Prevent the dropdown from closing when clicking inside it
+            var dropdownMenu = dropdownContainer.querySelector('.dropdown-menu');
+            if (dropdownMenu) {
+                dropdownMenu.addEventListener('click', function(e) {
+                    if (e.target.classList.contains('dropdown-item')) {
+                        // Allow the click to pass through for navigation
+                        return true;
+                    } else {
+                        // Prevent closing if clicking on non-navigation elements
+                        e.stopPropagation();
+                    }
+                });
+            }
+        });
+        
+        // Handle responsive behavior
+        window.addEventListener('resize', function() {
+            if (window.innerWidth < 992) {
+                // Remove hover events on mobile
+                dropdownInstances.forEach(function(dropdown) {
+                    var dropdownToggle = dropdown._element;
+                    var dropdownContainer = dropdownToggle.closest('.dropdown');
+                    
+                    dropdownContainer.removeEventListener('mouseenter', dropdown.show);
+                    dropdownContainer.removeEventListener('mouseleave', dropdown.hide);
+                });
+            }
+        });
+        
+        // Notification System
+        function showNotification(message, category) {
+            const container = document.getElementById('notification-container');
+            const notificationElement = document.createElement('div');
+            
+            // Set the category-specific styling
+            let bgColor, textColor, icon;
+            switch(category) {
+                case 'success':
+                    bgColor = 'bg-black/70 border border-green-500/50';
+                    textColor = 'text-green-400';
+                    icon = '<i class="fas fa-check-circle mr-2 text-green-400"></i>';
+                    break;
+                case 'error':
+                case 'danger':
+                    bgColor = 'bg-black/70 border border-red-500/50';
+                    textColor = 'text-red-400';
+                    icon = '<i class="fas fa-exclamation-circle mr-2 text-red-400"></i>';
+                    break;
+                case 'warning':
+                    bgColor = 'bg-black/70 border border-yellow-500/50';
+                    textColor = 'text-yellow-400';
+                    icon = '<i class="fas fa-exclamation-triangle mr-2 text-yellow-400"></i>';
+                    break;
+                case 'info':
+                    bgColor = 'bg-black/70 border border-blue-500/50';
+                    textColor = 'text-blue-400';
+                    icon = '<i class="fas fa-info-circle mr-2 text-blue-400"></i>';
+                    break;
+                default:
+                    bgColor = 'bg-black/70 border border-purple-500/50';
+                    textColor = 'text-purple-400';
+                    icon = '<i class="fas fa-bell mr-2 text-purple-400"></i>';
+            }
+            
+            // Build the notification element
+            notificationElement.className = `notification mt-4 mx-4 px-4 py-3 rounded-lg shadow-lg backdrop-blur-xl ${bgColor} ${textColor} flex items-center opacity-0 transform -translate-y-8 transition-all duration-300 max-w-md w-full pointer-events-auto`;
+            notificationElement.innerHTML = `${icon}${message}`;
+            
+            // Add a close button
+            const closeButton = document.createElement('button');
+            closeButton.className = 'ml-auto text-white/70 hover:text-white focus:outline-none transition-colors';
+            closeButton.innerHTML = '<i class="fas fa-times"></i>';
+            closeButton.addEventListener('click', () => {
+                hideNotification(notificationElement);
+            });
+            notificationElement.appendChild(closeButton);
+            
+            // Add to container
+            container.appendChild(notificationElement);
+            
+            // Show with animation
+            setTimeout(() => {
+                notificationElement.classList.remove('opacity-0', '-translate-y-8');
+                notificationElement.classList.add('opacity-100', 'translate-y-0');
+            }, 10);
+            
+            // Auto hide after 3.5 seconds
+            setTimeout(() => {
+                hideNotification(notificationElement);
+            }, 3500);
+        }
+        
+        function hideNotification(element) {
+            element.classList.remove('opacity-100', 'translate-y-0');
+            element.classList.add('opacity-0', '-translate-y-8');
+            
+            // Remove from DOM after animation completes
+            setTimeout(() => {
+                if (element.parentNode) {
+                    element.parentNode.removeChild(element);
+                }
+            }, 300);
+        }
+        
+        // Process flash messages
+        const flashMessages = document.querySelectorAll('.flash-messages .alert');
+        flashMessages.forEach((flashMessage, index) => {
+            const message = flashMessage.getAttribute('data-message');
+            const category = flashMessage.getAttribute('data-category');
+            
+            if (message && category) {
+                // Display messages with a slight delay between them
+                setTimeout(() => {
+                    showNotification(message, category);
+                }, index * 300);
+            }
+        });
+        
+        // Expose notification function globally
+        window.showNotification = showNotification;
+    });
+    </script>
+    
+    <style>
+    /* Notification Styles */
+    @keyframes slideInDown {
+        from {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes fadeOut {
+        from {
+            opacity: 1;
+        }
+        to {
+            opacity: 0;
+        }
+    }
+    
+    #notification-container {
+        top: 70px; /* Position below navbar */
+    }
+    
+    .notification {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 8px rgba(108, 43, 217, 0.3);
+        animation: glow 1.5s ease-in-out infinite alternate;
+    }
+    
+    @keyframes glow {
+        from {
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 5px rgba(108, 43, 217, 0.3);
+        }
+        to {
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 15px rgba(108, 43, 217, 0.5);
+        }
+    }
+    
+    /* Accessibility and reduced motion preferences */
+    @media (prefers-reduced-motion: reduce) {
+        .notification {
+            transition: none;
+            animation: none;
+        }
+    }
+    </style>
 </body>
 </html>

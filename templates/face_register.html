@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_new_registration %}Complete Your Registration{% else %}Register Face Authentication{% endif %}{% endblock %}
+
+{% block content %}
+<div class="glass-card backdrop-blur-xl bg-white/10 p-8 rounded-xl border border-white/20 shadow-lg mx-auto px-4 py-12 max-w-4xl mb-12">
+        {% if is_new_registration %}
+        <h1 class="text-3xl font-bold mb-6 text-center text-blue-400 drop-shadow-md">Complete Your Registration</h1>
+        
+        <div class="mb-8 text-center">
+            <div class="p-4 bg-blue-500/20 rounded-lg mb-6">
+                <p class="text-blue-400 font-semibold"><i class="fas fa-info-circle mr-2"></i> Final Step: Setup Face Authentication</p>
+                <p class="text-white/90 mt-2">Adding face authentication will help secure your account and provide an easier way to log in.</p>
+            </div>
+            <p class="mb-4 text-white/90">Please set up face recognition to complete your account registration. This will allow you to login with your face instead of typing your password every time.</p>
+        </div>
+        {% else %}
+        <h1 class="text-3xl font-bold mb-6 text-center text-blue-400 drop-shadow-md">Face Authentication Setup</h1>
+        
+        <div class="mb-8 text-center">
+            <p class="mb-4 text-white/90">Face recognition adds an extra layer of security to your account. When enabled, you'll need to verify your identity using your face after entering your password.</p>
+            
+            {% if face_status.registered %}
+            <div class="p-4 bg-green-500/20 rounded-lg mb-6">
+                <p class="text-green-400 font-semibold mb-2"><i class="fas fa-check-circle mr-2"></i> Face recognition is enabled</p>
+                <p class="text-sm text-white/80">Registered on: {{ face_status.created_at }}</p>
+                {% if face_status.last_verified != "Never verified" %}
+                <p class="text-sm text-white/80">Last verified: {{ face_status.last_verified }}</p>
+                {% endif %}
+            </div>
+            
+            <form action="{{ url_for('delete_face') }}" method="POST" onsubmit="return confirm('Are you sure you want to disable face authentication?');" class="mb-4">
+                <button type="submit" class="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-full transition-all duration-300">
+                    <i class="fas fa-trash mr-2"></i> Disable Face Authentication
+                </button>
+            </form>
+            {% else %}
+            <div class="p-4 bg-blue-500/20 rounded-lg mb-6">
+                <p class="text-blue-400"><i class="fas fa-info-circle mr-2"></i> Face recognition is not currently enabled</p>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        {% if not face_status.registered %}
+        <div class="flex justify-center mb-8">
+            <div class="w-full max-w-md border border-white/10 rounded-lg p-6 bg-gray-800/50 hover:bg-gray-800/70 transition-all duration-300">
+                <h3 class="text-xl font-semibold mb-4 text-center">Register with Webcam</h3>
+                <div class="flex flex-col items-center">
+                    <div class="p-4 bg-blue-500/20 rounded-lg mb-6 w-full text-center">
+                        <p class="text-blue-300 text-sm">
+                            <i class="fas fa-info-circle mr-1"></i> For security reasons, we require using your webcam for face registration
+                        </p>
+                    </div>
+                    <p class="mb-4 text-white/90">Take a photo using your device's camera to register your face:</p>
+                    <a href="{{ url_for('face_capture', action='register') }}" class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-full transition-all duration-300 inline-flex items-center">
+                        <i class="fas fa-camera mr-2"></i> Launch Camera
+                    </a>
+                    <p class="text-sm text-white/70 mt-4">Position yourself in a well-lit area with your face clearly visible.</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="mt-8 border-t border-white/10 pt-6">
+            <h3 class="text-xl font-semibold mb-4">Security Tips</h3>
+            <ul class="space-y-2 text-white/80">
+                <li class="flex items-center"><i class="fas fa-shield-alt text-green-500 mr-3"></i> Face authentication adds an extra layer of security to your account</li>
+                <li class="flex items-center"><i class="fas fa-lightbulb text-yellow-500 mr-3"></i> Use good lighting when registering and verifying your face</li>
+                <li class="flex items-center"><i class="fas fa-exclamation-triangle text-red-500 mr-3"></i> If you can't verify your face, you can still use SMS-based recovery</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

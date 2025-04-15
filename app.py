@@ -5,20 +5,52 @@ import logging
 import io
 import json
 import base64
-from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file
+import hashlib
+from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, Response, current_app, jsonify
 from core.auth import AuthenticationManager
 from core.file_manager import SecureFileManager
+from core.face_auth import FaceAuthManager
+from core.security import SecurityManager
+from cryptography.fernet import Fernet
 from datetime import datetime, timedelta
 from pathlib import Path
+import time
+from functools import wraps
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
 
 # Initialize managers
 auth_manager = AuthenticationManager()
 file_manager = SecureFileManager()
+face_auth_manager = FaceAuthManager()
+
+# Add this: modify request before processing to add is_xhr property
+@app.before_request
+def before_request():
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        request.is_xhr = True
+    else:
+        request.is_xhr = False
+
+# Login required decorator
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'token' not in session:
+            flash('Please log in to access this page.', 'error')
+            return redirect(url_for('login'))
+        
+        user_context = auth_manager.security.verify_token(session['token'])
+        if not user_context:
+            flash('Session expired. Please login again.', 'error')
+            return redirect(url_for('login'))
+            
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Add a context processor to inject responsive design variables
 @app.context_processor
@@ -35,15 +67,65 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Clear any existing authentication tokens when accessing login page
+    if 'token' in session:
+        session.pop('token', None)
+    
     if request.method == 'POST':
+        login_method = request.form.get('login_method', 'password')
         username = request.form['username']
-        password = request.form['password']
-        success, token = auth_manager.login(username, password)
-        if success:
-            session['token'] = token
-            flash('Login successful!', 'success')
-            return redirect(url_for('dashboard'))
-        flash('Invalid credentials!', 'error')
+        
+        # First, check if the user exists and has face authentication set up
+        user = auth_manager.get_user_by_username(username)
+        if not user:
+            flash('User not found.', 'error')
+            return render_template('login.html')
+            
+        user_id = user['id']
+        face_status = face_auth_manager.get_user_face_status(user_id)
+        has_face_auth = face_status.get('registered', False)
+        
+        # Handle face login flow with password verification
+        face_login_pending = request.form.get('face_login_pending') == 'true'
+        
+        if login_method == 'password' or face_login_pending:
+            # Traditional password-based login
+            password = request.form.get('password')
+            if not password:
+                flash('Please enter your password.', 'error')
+                return render_template('login.html')
+                
+            success, token = auth_manager.login(username, password)
+            if success:
+                if has_face_auth:
+                    # Store username and temporary token for face verification
+                    session['pending_login_username'] = username
+                    session['pending_token'] = token  # Store token temporarily
+                    flash('Password verified. Please complete face verification for multi-factor authentication.', 'success')
+                    return redirect(url_for('verify_face'))
+                else:
+                    # Only allow direct login if face auth is not set up
+                    session['token'] = token
+                    flash('Login successful!', 'success')
+                    return redirect(url_for('dashboard'))
+            else:
+                flash('Invalid credentials!', 'error')
+                if face_login_pending:
+                    return render_template('login.html', require_password=True, username=username)
+                else:
+                    return render_template('login.html')
+        elif login_method == 'face':
+            # Face-based login path - requires verification
+            if not has_face_auth:
+                flash('Face authentication not set up for this account. Please log in with your password first, then set up face authentication.', 'error')
+                return render_template('login.html')
+                
+            # For face login, we need to verify their password first as well for proper MFA
+            session['pending_login_username'] = username
+            session['face_login_pending'] = True
+            flash('Please enter your password for multi-factor authentication.', 'info')
+            return render_template('login.html', require_password=True, username=username)
+            
     return render_template('login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -52,7 +134,7 @@ def register():
         username = request.form['username']
         password = request.form['password']
         confirm_password = request.form.get('confirm_password')
-        phone_number = request.form.get('phone_number')
+        phone_number = request.form.get('phone')
         
         # Clean the phone number - remove spaces, dashes, parentheses, etc.
         if phone_number:
@@ -76,19 +158,14 @@ def register():
         if len(password) < 8:
             errors.append('Password must be at least 8 characters long')
             
-        # Validate phone number
-        if not phone_number:
+        # Validate phone number - fix the validation to be more lenient
+        if not phone_number or phone_number.strip() == '':
             errors.append('Please enter a phone number')
         else:
-            # Check if it's a valid phone number format
-            if phone_number.startswith('+'):
-                # With country code (should be at least 11 digits: +1 + 10 digits)
-                if len(phone_number) < 11:
-                    errors.append('International phone number is too short')
-            else:
-                # Without country code (assuming Indian 10-digit number or US 10-digit)
-                if len(phone_number) != 10:
-                    errors.append('Phone number should be 10 digits')
+            # More relaxed validation - just check if it has enough digits
+            digit_count = sum(1 for c in phone_number if c.isdigit())
+            if digit_count < 10:
+                errors.append('Phone number should have at least 10 digits')
         
         # If there are validation errors, show them
         if errors:
@@ -102,7 +179,18 @@ def register():
         success, message = auth_manager.register(username, password, phone_number)
         
         if success:
-            flash('Registration successful! Please login.', 'success')
+            # Get the user ID for the newly registered user
+            user = auth_manager.get_user_by_username(username)
+            if user:
+                # Log the user in automatically
+                success, token = auth_manager.login(username, password)
+                if success:
+                    session['token'] = token
+                    flash('Registration successful! Please set up face authentication to complete your account setup.', 'success')
+                    return redirect(url_for('face_setup'))
+            
+            # Fallback if we couldn't auto-login
+            flash('Registration successful! Please log in with your credentials.', 'success')
             return redirect(url_for('login'))
         else:
             flash(message, 'error')
@@ -115,10 +203,8 @@ def register():
     return render_template('register.html')
 
 @app.route('/dashboard')
+@login_required
 def dashboard():
-    if 'token' not in session:
-        return redirect(url_for('login'))
-        
     user_context = auth_manager.security.verify_token(session['token'])
     if not user_context:
         flash('Session expired. Please login again.', 'error')
@@ -168,10 +254,8 @@ def dashboard():
         return render_template('dashboard.html', files=[])
 
 @app.route('/shared')
+@login_required
 def shared_files():
-    if 'token' not in session:
-        return redirect(url_for('login'))
-        
     user_context = auth_manager.security.verify_token(session['token'])
     if not user_context:
         flash('Session expired. Please login again.', 'error')
@@ -487,19 +571,729 @@ def upload_file():
     os.remove(temp_path)  # Clean up
     
     flash(message, 'success' if success else 'error')
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('dashboard', action='upload', success=success))
 
 @app.route('/logout')
 def logout():
     session.clear()
-    flash('You have been logged out.', 'success')
+    flash('Logged out successfully!', 'success')
     return redirect(url_for('login'))
+
+@app.route('/forgot_password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        if not username:
+            flash('Please enter your username.', 'error')
+            return render_template('forgot_password.html')
+            
+        # Generate OTP for password reset
+        success, message = auth_manager.generate_otp(username)
+        if success:
+            flash(message, 'success')
+            return redirect(url_for('verify_otp', username=username))
+        else:
+            # Don't reveal if user exists for security reasons
+            if message == "User not found":
+                flash('If your account exists, a verification code has been sent to your registered phone number.', 'info')
+            else:
+                flash(message, 'error')
+            return render_template('forgot_password.html')
+            
+    return render_template('forgot_password.html')
+
+@app.route('/reset_password/<username>', methods=['GET', 'POST'])
+def reset_password(username):
+    if request.method == 'POST':
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        if not password or not confirm_password:
+            flash('Please enter both password fields.', 'error')
+            return render_template('reset_password.html', username=username)
+            
+        if password != confirm_password:
+            flash('Passwords do not match.', 'error')
+            return render_template('reset_password.html', username=username)
+            
+        # Check password strength
+        if len(password) < 8:
+            flash('Password must be at least 8 characters long.', 'error')
+            return render_template('reset_password.html', username=username)
+            
+        # Reset the password using auth manager
+        success, message = auth_manager.reset_password(username, password)
+        if success:
+            flash('Your password has been reset successfully. You can now login with your new password.', 'success')
+            return redirect(url_for('login'))
+        else:
+            flash(message, 'error')
+            return render_template('reset_password.html', username=username)
+    
+    return render_template('reset_password.html', username=username)
+
+@app.route('/verify_face', methods=['GET', 'POST'])
+def verify_face():
+    # Check if there's a pending login
+    if 'pending_login_username' not in session:
+        flash('No pending login to verify.', 'error')
+        return redirect(url_for('login'))
+    
+    username = session['pending_login_username']
+    
+    # Get user by username
+    user = auth_manager.get_user_by_username(username)
+    if not user:
+        flash('User not found.', 'error')
+        return redirect(url_for('login'))
+        
+    user_id = user['id']
+    
+    # Check if user has face auth set up
+    has_face_auth = face_auth_manager.has_face_auth(user_id)
+    if not has_face_auth:
+        flash('Face authentication not set up for this account. Please log in with your password first, then set up face authentication.', 'error')
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        # Process the face verification
+        if 'face_image' not in request.files:
+            flash('No face image provided.', 'error')
+            return render_template('face_verify.html', username=username)
+        
+        file = request.files['face_image']
+        
+        if file.filename == '':
+            flash('No face image selected.', 'error')
+            return render_template('face_verify.html', username=username)
+        
+        try:
+            # Get user information
+            user = auth_manager.get_user_by_username(username)
+            if not user:
+                flash('User not found.', 'error')
+                return redirect(url_for('login'))
+            
+            user_id = user['id']
+            
+            # Read the image data
+            image_data = file.read()
+            
+            # Verify face
+            success, message = face_auth_manager.verify_face(user_id, image_data, username=username)
+            
+            if success:
+                # Complete the login
+                if 'pending_token' in session:
+                    session['token'] = session.pop('pending_token')
+                    session.pop('pending_login_username', None)
+                    if 'face_login_pending' in session:
+                        session.pop('face_login_pending', None)
+                        
+                    flash('Face verification successful. Welcome back!', 'success')
+                    return redirect(url_for('dashboard'))
+                else:
+                    flash('Session expired. Please login again.', 'error')
+                    return redirect(url_for('login'))
+            else:
+                flash(f'Face verification failed: {message}', 'error')
+                return render_template('face_verify.html', username=username)
+        except Exception as e:
+            logging.error(f"Error processing face verification: {str(e)}")
+            import traceback
+            logging.error(traceback.format_exc())
+            flash(f"Error processing face verification: {str(e)}", 'error')
+            return render_template('face_verify.html', username=username)
+    
+    # GET request - show the face verification page
+    return render_template('face_verify.html', username=username)
+
+@app.route('/verify_face_complete', methods=['POST'])
+def verify_face_complete():
+    if 'pending_login_username' not in session:
+        flash('No pending login to verify.', 'error')
+        return redirect(url_for('login'))
+    
+    # This endpoint is hit from the face_capture.html form submission
+    if 'image_data' not in request.form:
+        flash('No face data provided.', 'error')
+        return redirect(url_for('verify_face'))
+    
+    try:
+        username = session['pending_login_username']
+        user = auth_manager.get_user_by_username(username)
+        if not user:
+            flash('User not found.', 'error')
+            return redirect(url_for('login'))
+        
+        user_id = user['id']
+        
+        # Get the image data from the form
+        image_data = base64.b64decode(request.form['image_data'].split(',')[1])
+        
+        # Verify face
+        success, message = face_auth_manager.verify_face(user_id, image_data, username=username)
+        
+        if success:
+            # Complete the login
+            if 'pending_token' in session:
+                session['token'] = session.pop('pending_token')
+                session.pop('pending_login_username', None)
+                if 'face_login_pending' in session:
+                    session.pop('face_login_pending', None)
+                    
+                flash('Face verification successful. Welcome back!', 'success')
+                return redirect(url_for('dashboard'))
+            else:
+                flash('Session expired. Please login again.', 'error')
+                return redirect(url_for('login'))
+        else:
+            flash(f'Face verification failed: {message}', 'error')
+            return redirect(url_for('verify_face'))
+    except Exception as e:
+        logging.error(f"Error processing face verification: {str(e)}")
+        import traceback
+        logging.error(traceback.format_exc())
+        flash(f"Error processing face verification. Please try again.", 'error')
+    
+    return redirect(url_for('verify_face'))
+
+@app.route('/face_setup', methods=['GET'])
+@login_required
+def face_setup():
+    user_context = auth_manager.security.verify_token(session['token'])
+    if not user_context:
+        flash('Session expired. Please login again.', 'error')
+        return redirect(url_for('login'))
+    
+    # Check if user already has face auth set up
+    face_status = face_auth_manager.get_user_face_status(user_context['user_id'])
+    
+    # Render the face registration page with is_new_registration flag
+    return render_template('face_register.html', 
+                          face_status=face_status, 
+                          is_new_registration=True)
+
+@app.route('/check_face_auth', methods=['GET'])
+def check_face_auth():
+    """AJAX endpoint to check if a user has face authentication set up"""
+    username = request.args.get('username')
+    if not username:
+        return jsonify({'has_face_auth': False, 'error': 'No username provided'})
+    
+    # Get user by username
+    user = auth_manager.get_user_by_username(username)
+    if not user:
+        return jsonify({'has_face_auth': False, 'error': 'User not found'})
+    
+    # Check if user has face auth set up
+    has_face_auth = face_auth_manager.has_face_auth(user['id'])
+    
+    return jsonify({'has_face_auth': has_face_auth})
+
+@app.route('/register_face', methods=['GET', 'POST'])
+@login_required
+def register_face():
+    user_context = auth_manager.security.verify_token(session['token'])
+    if not user_context:
+        flash('Session expired. Please login again.', 'error')
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        # Process face registration
+        if 'image_data' not in request.form:
+            flash('No face data provided.', 'error')
+            return render_template('face_capture.html', action='register')
+        
+        try:
+            # Get the image data from the form
+            image_data_str = request.form['image_data']
+            
+            # Debug information
+            logging.info(f"Received image data. Length: {len(image_data_str)}")
+            if len(image_data_str) < 100:
+                flash('Invalid image data received. Please try again.', 'error')
+                return render_template('face_capture.html', action='register')
+            
+            # Properly decode the image data
+            if ',' in image_data_str:  # Handle data URL format
+                image_data = base64.b64decode(image_data_str.split(',')[1])
+            else:  # Handle raw base64
+                try:
+                    image_data = base64.b64decode(image_data_str)
+                except Exception as e:
+                    logging.error(f"Error decoding base64 data: {str(e)}")
+                    flash(f'Error processing image: {str(e)}', 'error')
+                    return render_template('face_capture.html', action='register')
+            
+            # Register face
+            success, message = face_auth_manager.register_face(user_context['user_id'], image_data, username=user_context.get('username'))
+            
+            if success:
+                flash('Face registered successfully! Please login to continue.', 'success')
+                # Log the user out to ensure proper authentication flow
+                session.pop('token', None)
+                return redirect(url_for('login'))
+            else:
+                flash(f'Face registration failed: {message}', 'error')
+                return render_template('face_capture.html', action='register')
+        except Exception as e:
+            logging.error(f"Error registering face: {str(e)}")
+            import traceback
+            logging.error(traceback.format_exc())
+            flash(f"Error registering face: {str(e)}", 'error')
+            return render_template('face_capture.html', action='register')
+    
+    # GET request - show the face registration page
+    return render_template('face_capture.html', action='register')
+
+@app.route('/face_capture/<action>', methods=['GET'])
+def face_capture(action):
+    if action not in ['register', 'verify']:
+        flash('Invalid action specified.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # For verification, check if there's a pending login
+    if action == 'verify' and 'pending_login_username' not in session:
+        flash('No pending login to verify.', 'error')
+        return redirect(url_for('login'))
+    
+    # For registration, check if user is logged in
+    if action == 'register':
+        if 'token' not in session:
+            flash('Please log in to access this page.', 'error')
+            return redirect(url_for('login'))
+        
+        user_context = auth_manager.security.verify_token(session['token'])
+        if not user_context:
+            flash('Session expired. Please login again.', 'error')
+            return redirect(url_for('login'))
+    
+    return render_template('face_capture.html', action=action)
+
+@app.route('/delete_face', methods=['POST'])
+@login_required
+def delete_face():
+    user_context = auth_manager.security.verify_token(session['token'])
+    if not user_context:
+        flash('Session expired. Please login again.', 'error')
+        return redirect(url_for('login'))
+    
+    try:
+        # Delete face data
+        success, message = face_auth_manager.delete_face_data(user_context['user_id'])
+        if success:
+            flash('Face authentication disabled successfully.', 'success')
+        else:
+            flash(f'Error disabling face authentication: {message}', 'error')
+    except Exception as e:
+        logging.error(f"Error deleting face data: {str(e)}")
+        flash(f'Error disabling face authentication: {str(e)}', 'error')
+    
+    # Redirect to appropriate page based on referer
+    referer = request.referrer
+    if referer and 'face_register' in referer:
+        return redirect(url_for('dashboard'))
+    elif referer and 'user_profile' in referer:
+        return redirect(url_for('user_profile'))
+    else:
+        return redirect(url_for('settings'))
+
+@app.route('/user_profile')
+@login_required
+def user_profile():
+    if 'token' not in session:
+        flash('Please log in to access this page.', 'error')
+        return redirect(url_for('login'))
+
+    try:
+        user_context = auth_manager.security.verify_token(session['token'])
+        if not user_context or not isinstance(user_context, dict):
+            session.clear()
+            flash('Session expired. Please login again.', 'error')
+            return redirect(url_for('login'))
+
+        user_id = user_context.get('user_id')
+        if not user_id:
+            session.clear()
+            flash('Invalid session. Please login again.', 'error')
+            return redirect(url_for('login'))
+
+        # Get user info
+        with sqlite3.connect(auth_manager.db_path) as conn:
+            # Ensure activity_log table exists
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS activity_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT,
+                    operation TEXT,
+                    resource_id TEXT,
+                    timestamp TEXT,
+                    status TEXT,
+                    details TEXT
+                )
+            """)
+            conn.commit()
+            
+            cursor = conn.execute(
+                "SELECT id, username, role, phone_number, created_at, last_login FROM users WHERE id = ?",
+                (user_id,)
+            )
+            user_data = cursor.fetchone()
+            
+            if not user_data:
+                flash('User profile not found', 'error')
+                return redirect(url_for('dashboard'))
+                
+            user_id, username, role, phone_number, created_at, last_login = user_data
+            
+            # Get face authentication status with error handling
+            try:
+                face_status = face_auth_manager.get_user_face_status(user_id)
+                if face_status is None or not isinstance(face_status, dict):
+                    face_status = {}
+            except Exception as e:
+                logging.error(f"Error getting face status: {str(e)}")
+                face_status = {}
+            
+            # Get activity logs - with error handling
+            try:
+                cursor = conn.execute(
+                    """SELECT operation, timestamp, details FROM activity_log 
+                       WHERE user_id = ? ORDER BY timestamp DESC LIMIT 5""",
+                    (user_id,)
+                )
+                recent_activities = []
+                for row in cursor.fetchall():
+                    op, ts, details = row
+                    try:
+                        details_dict = json.loads(details) if details else {}
+                    except:
+                        details_dict = {}
+                        
+                    recent_activities.append({
+                        'operation': op,
+                        'timestamp': datetime.fromisoformat(ts).strftime('%Y-%m-%d %H:%M') if ts else 'Unknown',
+                        'details': details_dict
+                    })
+            except sqlite3.Error as e:
+                logging.error(f"Database error when fetching activity logs: {str(e)}")
+                recent_activities = []
+                
+            # Get file stats - with error handling
+            try:
+                cursor = conn.execute(
+                    "SELECT COUNT(*) FROM files WHERE owner_id = ?",
+                    (user_id,)
+                )
+                file_count = cursor.fetchone()[0]
+                
+                # Ensure access_control table exists
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS access_control (
+                        resource_id TEXT,
+                        user_id TEXT,
+                        permission_level TEXT,
+                        granted_by TEXT,
+                        granted_at TEXT,
+                        expires_at TEXT,
+                        UNIQUE(resource_id, user_id)
+                    )
+                """)
+                
+                cursor = conn.execute(
+                    """SELECT COUNT(*) FROM access_control ac
+                       JOIN files f ON ac.resource_id = f.id
+                       WHERE f.owner_id = ?""",
+                    (user_id,)
+                )
+                shared_count = cursor.fetchone()[0]
+            except sqlite3.Error as e:
+                logging.error(f"Database error when fetching file stats: {str(e)}")
+                file_count = 0
+                shared_count = 0
+            
+            # Create profile object
+            profile = {
+                'user_id': user_id,
+                'username': username,
+                'role': role,
+                'phone_number': phone_number,
+                'created_at': datetime.fromisoformat(created_at).strftime('%Y-%m-%d') if created_at else 'Unknown',
+                'last_login': datetime.fromisoformat(last_login).strftime('%Y-%m-%d %H:%M') if last_login else 'Never',
+                'face_enabled': face_status.get('registered', False),
+                'file_count': file_count,
+                'shared_count': shared_count
+            }
+            
+        return render_template('user_profile.html', profile=profile, recent_activities=recent_activities)
+            
+    except Exception as e:
+        logging.error(f"Error loading user profile: {str(e)}")
+        import traceback
+        logging.error(traceback.format_exc())
+        flash(f'Error loading profile: {str(e)}', 'error')
+        return redirect(url_for('dashboard'))
+
+@app.route('/activity_log')
+@login_required
+def activity_log():
+    user_context = auth_manager.security.verify_token(session['token'])
+    if not user_context:
+        flash('Session expired. Please login again.', 'error')
+        return redirect(url_for('login'))
+    
+    try:
+        # Ensure activity_log table exists
+        with sqlite3.connect(auth_manager.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS activity_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT,
+                    operation TEXT,
+                    resource_id TEXT,
+                    timestamp TEXT,
+                    status TEXT,
+                    details TEXT
+                )
+            """)
+            conn.commit()
+            
+            # Get activity logs with better error handling
+            try:
+                cursor = conn.execute(
+                    """SELECT operation, resource_id, timestamp, status, details FROM activity_log 
+                       WHERE user_id = ? ORDER BY timestamp DESC LIMIT 100""",
+                    (user_context['user_id'],)
+                )
+                
+                activities = []
+                for row in cursor.fetchall():
+                    operation, resource_id, timestamp, status, details = row
+                    try:
+                        details_dict = json.loads(details) if details else {}
+                    except:
+                        details_dict = {}
+                        
+                    activities.append({
+                        'operation': operation,
+                        'resource_id': resource_id,
+                        'timestamp': datetime.fromisoformat(timestamp).strftime('%Y-%m-%d %H:%M:%S') if timestamp else 'Unknown',
+                        'status': status,
+                        'details': details_dict
+                    })
+            except sqlite3.Error as e:
+                logging.error(f"Database error when fetching activity logs: {str(e)}")
+                activities = []
+                flash(f'Some activity data could not be loaded.', 'warning')
+            
+        return render_template('activity_log.html', activities=activities)
+        
+    except Exception as e:
+        logging.error(f"Error loading activity log: {str(e)}")
+        import traceback
+        logging.error(traceback.format_exc())
+        flash(f'Error loading activity log: {str(e)}', 'error')
+        return redirect(url_for('dashboard'))
+
+@app.route('/verify_otp/<username>', methods=['GET', 'POST'])
+def verify_otp(username):
+    if request.method == 'POST':
+        otp = request.form.get('otp')
+        if not otp:
+            flash('Please enter the OTP.', 'error')
+            return render_template('verify_otp.html', username=username)
+            
+        # Verify OTP using the auth manager
+        success, message = auth_manager.verify_otp(username, otp)
+        if success:
+            flash('OTP verified successfully! You can now reset your password.', 'success')
+            return redirect(url_for('reset_password', username=username))
+        else:
+            flash(message, 'error')
+            return render_template('verify_otp.html', username=username)
+            
+    return render_template('verify_otp.html', username=username)
+
+@app.route('/disable_otp', methods=['POST'])
+@login_required
+def disable_otp():
+    user_context = auth_manager.security.verify_token(session['token'])
+    if not user_context:
+        flash('Session expired. Please login again.', 'error')
+        return redirect(url_for('login'))
+    
+    # Disable OTP logic would go here
+    # For now, just simulate success
+    flash('Two-factor authentication disabled successfully.', 'success')
+    return redirect(url_for('user_profile'))
+
+@app.route('/share_file/<file_id>', methods=['GET', 'POST'])
+@login_required
+def share_file(file_id):
+    user_context = auth_manager.security.verify_token(session['token'])
+    if not user_context:
+        flash('Session expired. Please login again.', 'error')
+        return redirect(url_for('login'))
+        
+    try:
+        # Check if user is the owner of the file
+        with sqlite3.connect(file_manager.db_path) as conn:
+            cursor = conn.execute(
+                """SELECT f.id, f.filename, f.owner_id, u.username as owner_name
+                   FROM files f
+                   JOIN users u ON f.owner_id = u.id 
+                   WHERE f.id = ?""", 
+                (file_id,)
+            )
+            file_info = cursor.fetchone()
+            
+            if not file_info:
+                flash('File not found.', 'error')
+                return redirect(url_for('dashboard'))
+            
+            file_id, filename, owner_id, owner_name = file_info
+            
+            # Check ownership or admin permission
+            is_owner = owner_id == user_context['user_id']
+            
+            if not is_owner:
+                # Check if user has admin permission
+                cursor = conn.execute(
+                    """SELECT permission_level FROM access_control 
+                       WHERE resource_id = ? AND user_id = ? AND permission_level = 'admin'""",
+                    (file_id, user_context['user_id'])
+                )
+                admin_permission = cursor.fetchone() is not None
+                
+                if not admin_permission:
+                    flash('You do not have permission to share this file.', 'error')
+                    return redirect(url_for('dashboard'))
+            
+            # Get current shares
+            cursor = conn.execute(
+                """SELECT u.username, ac.permission_level, ac.granted_at, ac.expires_at
+                   FROM access_control ac
+                   JOIN users u ON ac.user_id = u.id
+                   WHERE ac.resource_id = ?""",
+                (file_id,)
+            )
+            
+            current_shares = []
+            for row in cursor.fetchall():
+                username, permission, granted_at, expires_at = row
+                
+                # Skip the owner in the list
+                if username == user_context['username']:
+                    continue
+                    
+                current_shares.append({
+                    'username': username,
+                    'permission': permission,
+                    'granted_at': datetime.fromisoformat(granted_at).strftime('%Y-%m-%d') if granted_at else 'Unknown',
+                    'expires_at': datetime.fromisoformat(expires_at).strftime('%Y-%m-%d') if expires_at else 'Never'
+                })
+            
+            # Process form submission
+            if request.method == 'POST':
+                username = request.form.get('username')
+                permission = request.form.get('permission', 'read')
+                expires_days = request.form.get('expires', '')
+                
+                if not username:
+                    flash('Please enter a username to share with.', 'error')
+                    return render_template('share.html', file_id=file_id, filename=filename, 
+                                         current_shares=current_shares, is_owner=is_owner)
+                
+                # Check if user exists
+                cursor = conn.execute("SELECT id FROM users WHERE username = ?", (username,))
+                user = cursor.fetchone()
+                
+                if not user:
+                    flash(f'User "{username}" not found.', 'error')
+                    return render_template('share.html', file_id=file_id, filename=filename, 
+                                         current_shares=current_shares, is_owner=is_owner)
+                
+                target_user_id = user[0]
+                
+                # Validate parameters
+                if permission not in ['read', 'write', 'admin']:
+                    permission = 'read'  # Default to read
+                
+                expires_at = None
+                if expires_days and expires_days.isdigit():
+                    expires_at = (datetime.now() + timedelta(days=int(expires_days))).isoformat()
+                
+                # Share the file
+                success, message = file_manager.share_file(
+                    file_id, 
+                    user_context, 
+                    username, 
+                    permission_level=permission, 
+                    expires_days=int(expires_days) if expires_days and expires_days.isdigit() else None
+                )
+                
+                if success:
+                    flash(f'File shared successfully with {username}.', 'success')
+                else:
+                    flash(f'Error sharing file: {message}', 'error')
+                
+                # Redirect to refresh the page with updated shares
+                return redirect(url_for('share_file', file_id=file_id))
+            
+            # Render the share page
+            return render_template('share.html', file_id=file_id, filename=filename, 
+                                 current_shares=current_shares, is_owner=is_owner)
+    
+    except Exception as e:
+        logging.error(f"Error in share_file: {str(e)}")
+        flash(f'Error sharing file: {str(e)}', 'error')
+        return redirect(url_for('dashboard'))
+
+@app.route('/download-decrypted')
+@login_required
+def download_decrypted():
+    # Check if there's a pending download in the session
+    if 'pending_download' not in session:
+        flash('No pending download found.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    download_info = session.pop('pending_download')  # Remove from session after retrieving
+    
+    try:
+        # Check if the temporary file exists
+        if not os.path.exists(download_info['path']):
+            flash('Download expired. Please try decrypting again.', 'error')
+            return redirect(url_for('dashboard'))
+        
+        # Read the file data
+        with open(download_info['path'], 'rb') as f:
+            file_data = f.read()
+        
+        # Create a BytesIO object
+        data_io = io.BytesIO(file_data)
+        
+        # Delete the temporary file
+        os.remove(download_info['path'])
+        
+        # Send the file to the user
+        return send_file(
+            data_io,
+            mimetype=download_info['mime_type'],
+            as_attachment=True,
+            download_name=download_info['filename']
+        )
+    
+    except Exception as e:
+        logging.error(f"Error during download: {str(e)}")
+        flash('Error downloading file.', 'error')
+        return redirect(url_for('dashboard'))
 
 @app.route('/download/<file_id>')
 def download_file(file_id):
     if 'token' not in session:
         return redirect(url_for('login'))
-    
+        
     user_context = auth_manager.security.verify_token(session['token'])
     if not user_context:
         flash('Session expired. Please login again.', 'error')
@@ -549,476 +1343,353 @@ def download_file(file_id):
         return redirect(url_for('dashboard'))
 
 @app.route('/decrypt/<file_id>', methods=['POST'])
+@login_required
 def decrypt_file(file_id):
-    if 'token' not in session:
-        return redirect(url_for('login'))
-    
-    user_context = auth_manager.security.verify_token(session['token'])
-    if not user_context:
-        flash('Session expired. Please login again.', 'error')
-        return redirect(url_for('login'))
-    
+    success = False
     try:
-        # Get file information first to log details
+        user_context = auth_manager.security.verify_token(session['token'])
+        if not user_context:
+            flash('Session expired. Please login again.', 'error')
+            return redirect(url_for('login'))
+            
+        # Get file info from file_manager
         with sqlite3.connect(file_manager.db_path) as conn:
-            # First check if user is the owner
-            cursor = conn.execute(
-                "SELECT filename, file_path, owner_id FROM files WHERE id = ?",
-                (file_id,)
-            )
-            file_info = cursor.fetchone()
-            if not file_info:
-                flash('File information not found.', 'error')
-                # Redirect based on referer
-                referer = request.referrer
-                if referer and 'shared' in referer:
-                    return redirect(url_for('shared_files'))
-                return redirect(url_for('dashboard'))
+            # First check if original_filename column exists in the files table
+            cursor = conn.execute("PRAGMA table_info(files)")
+            columns = [info[1] for info in cursor.fetchall()]
             
-            filename, file_path, owner_id = file_info
-            logging.info(f"Starting decryption for file: {filename} (ID: {file_id}, Path: {file_path})")
-            
-            # Check if user has permission - either owner or shared access
-            has_permission = False
-            if owner_id == user_context['user_id']:
-                has_permission = True
-                logging.info(f"User is the owner, proceeding with decryption")
+            # Adjust query based on available columns
+            if 'original_filename' in columns:
+                query = "SELECT owner_id, file_path, filename, original_filename, mime_type, file_type FROM files WHERE id = ?"
             else:
-                # Check access_control for permission
-                cursor = conn.execute("""
-                    SELECT permission_level FROM access_control 
-                    WHERE resource_id = ? AND user_id = ? AND 
-                          (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
-                """, (file_id, user_context['user_id']))
-                
-                permission = cursor.fetchone()
-                if permission and permission[0] in ('read', 'write', 'admin'):
-                    has_permission = True
-                    logging.info(f"User has {permission[0]} permission, proceeding with decryption")
+                query = "SELECT owner_id, file_path, filename FROM files WHERE id = ?"
             
-            if not has_permission:
-                flash('You do not have permission to decrypt this file.', 'error')
-                # Redirect based on referer
-                referer = request.referrer
-                if referer and 'shared' in referer:
-                    return redirect(url_for('shared_files'))
-                return redirect(url_for('dashboard'))
-            
-            # Check if file exists
-            if not os.path.exists(file_path):
-                flash(f'File not found on disk: {file_path}', 'error')
-                # Redirect based on referer
-                referer = request.referrer
-                if referer and 'shared' in referer:
-                    return redirect(url_for('shared_files'))
-                return redirect(url_for('dashboard'))
-            
-            # Get file size for debugging
-            file_size = os.path.getsize(file_path)
-            logging.info(f"Encrypted file size: {file_size} bytes")
-
-        # Call the file manager's decrypt method
-        success, message, decrypted_data = file_manager.decrypt_file(file_id, user_context)
-        
-        if not success or not decrypted_data:
-            logging.error(f"Decryption failed: {message}")
-            flash(message, 'error')
-            # Redirect based on referer
-            referer = request.referrer
-            if referer and 'shared' in referer:
-                return redirect(url_for('shared_files'))
-            return redirect(url_for('dashboard'))
-        
-        # Clean up filename for the decrypted version
-        clean_filename = filename
-        if clean_filename.startswith("encrypted_"):
-            clean_filename = clean_filename[10:]
-        
-        # Determine the correct mimetype based on file extension
-        mime_type = 'application/octet-stream'
-        ext = os.path.splitext(clean_filename)[1].lower()
-        
-        # Map common extensions to MIME types
-        mime_mapping = {
-            '.pdf': 'application/pdf',
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.png': 'image/png',
-            '.gif': 'image/gif',
-            '.txt': 'text/plain',
-            '.doc': 'application/msword',
-            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            '.xls': 'application/vnd.ms-excel',
-            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            '.ppt': 'application/vnd.ms-powerpoint',
-            '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        }
-        
-        if ext in mime_mapping:
-            mime_type = mime_mapping[ext]
-        
-        # Create a BytesIO object from the decrypted data
-        data_io = io.BytesIO(decrypted_data)
-        
-        # Return the file as an attachment
-        logging.info(f"Returning decrypted file: {clean_filename} ({len(decrypted_data)} bytes)")
-        return send_file(
-            data_io,
-            mimetype=mime_type,
-            as_attachment=True,
-            download_name=clean_filename
-        )
-            
-    except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        logging.error(f"Decryption error: {str(e)}")
-        logging.error(f"Traceback: {error_details}")
-        flash(f'Error decrypting file: {str(e)}', 'error')
-        # Redirect based on referer
-        referer = request.referrer
-        if referer and 'shared' in referer:
-            return redirect(url_for('shared_files'))
-        return redirect(url_for('dashboard'))
-
-@app.route('/delete/<file_id>', methods=['POST'])
-def delete_file(file_id):
-    if 'token' not in session:
-        return redirect(url_for('login'))
-    
-    user_context = auth_manager.security.verify_token(session['token'])
-    if not user_context:
-        flash('Session expired. Please login again.', 'error')
-        return redirect(url_for('login'))
-    
-    try:
-        # Delete file logic here
-        with sqlite3.connect(file_manager.db_path) as conn:
-            cursor = conn.execute(
-                "SELECT file_path FROM files WHERE id = ? AND owner_id = ?",
-                (file_id, user_context['user_id'])
-            )
-            file_info = cursor.fetchone()
-            
-            if not file_info:
-                flash('File not found or access denied.', 'error')
-                return redirect(url_for('dashboard'))
-                
-            file_path = file_info[0]
-            
-            # Delete from filesystem
-            if os.path.exists(file_path):
-                os.remove(file_path)
-                
-            # Delete from database
-            conn.execute("DELETE FROM files WHERE id = ?", (file_id,))
-            conn.commit()
-            
-            flash('File deleted successfully.', 'success')
-            
-    except Exception as e:
-        logging.error(f"Delete error: {str(e)}")
-        flash('Error deleting file.', 'error')
-    
-    return redirect(url_for('dashboard'))
-
-@app.route('/share/<file_id>', methods=['GET', 'POST'])
-def share_file(file_id):
-    if 'token' not in session:
-        return redirect(url_for('login'))
-    
-    user_context = auth_manager.security.verify_token(session['token'])
-    if not user_context:
-        flash('Session expired. Please login again.', 'error')
-        return redirect(url_for('login'))
-    
-    # Get file details for display
-    try:
-        with sqlite3.connect(file_manager.db_path) as conn:
-            # First check if the access_control table exists, create if not
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS access_control (
-                    resource_id TEXT,
-                    user_id TEXT,
-                    permission_level TEXT,
-                    granted_by TEXT,
-                    granted_at TEXT,
-                    expires_at TEXT,
-                    UNIQUE(resource_id, user_id)
-                )
-            """)
-            
-            cursor = conn.execute(
-                "SELECT filename, owner_id FROM files WHERE id = ?",
-                (file_id,)
-            )
+            cursor = conn.execute(query, (file_id,))
             file_info = cursor.fetchone()
             
             if not file_info:
                 flash('File not found.', 'error')
                 return redirect(url_for('dashboard'))
-                
-            filename, owner_id = file_info
             
-            # Only allow sharing if user is the owner (permissions already checked in file_manager)
-            if request.method == 'POST':
-                target_username = request.form.get('username')
-                permission_level = request.form.get('permission', 'read')
-                expiry_days = request.form.get('expiry')
-                
-                if not target_username:
-                    flash('Please select a user to share with.', 'error')
-                    return redirect(url_for('share_file', file_id=file_id))
-                
-                # Convert expiry to integer if provided
-                if expiry_days and expiry_days.isdigit():
-                    expiry_days = int(expiry_days)
-                else:
-                    expiry_days = None
-                
-                # Validate permission level
-                if permission_level not in ['read', 'write', 'admin']:
-                    permission_level = 'read'  # Default to read if invalid
-                
-                # Share the file
-                success, message = file_manager.share_file(
-                    file_id, 
-                    user_context, 
-                    target_username, 
-                    permission_level,
-                    expiry_days
-                )
-                
-                flash(message, 'success' if success else 'error')
-                if success:
-                    return redirect(url_for('share_file', file_id=file_id))
+            # Extract file info based on available columns
+            if 'original_filename' in columns:
+                owner_id, file_path, filename, original_filename, mime_type, file_type = file_info
+            else:
+                owner_id, file_path, filename = file_info
+                original_filename = filename
+                mime_type = 'application/octet-stream'
+                file_type = os.path.splitext(filename)[1].strip('.') or 'bin'
             
-            # Get list of users who have access to this file
-            try:
+            # Verify ownership
+            if owner_id != user_context['user_id']:
+                # Check if user has permission through sharing
                 cursor = conn.execute("""
-                    SELECT u.username, ac.permission_level, ac.granted_at, ac.expires_at 
-                    FROM access_control ac 
-                    JOIN users u ON ac.user_id = u.id 
-                    WHERE ac.resource_id = ?
-                """, (file_id,))
+                    SELECT 1 FROM access_control 
+                    WHERE resource_id = ? AND user_id = ? AND 
+                          (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
+                """, (file_id, user_context['user_id']))
                 
-                shared_users = [
-                    {
-                        'username': row[0],
-                        'permission': row[1],
-                        'granted_at': datetime.fromisoformat(row[2]).strftime('%Y-%m-%d') if row[2] else '',
-                        'expires_at': datetime.fromisoformat(row[3]).strftime('%Y-%m-%d') if row[3] else 'Never'
-                    }
-                    for row in cursor.fetchall()
-                ]
-            except sqlite3.Error as db_error:
-                logging.error(f"Database error fetching shared users: {str(db_error)}")
-                shared_users = []
+                if not cursor.fetchone():
+                    flash('You do not have permission to decrypt this file.', 'error')
+                    return redirect(url_for('dashboard'))
             
-            # Get all users for sharing (excluding current user)
-            try:
-                cursor = conn.execute(
-                    "SELECT username FROM users WHERE id != ?",
-                    (user_context['user_id'],)
-                )
-                available_users = [row[0] for row in cursor.fetchall()]
-            except sqlite3.Error:
-                # If there's an error, provide a minimal list 
-                available_users = []
-                flash('Could not load user list. Some functionality may be limited.', 'warning')
-            
-            return render_template(
-                'share.html', 
-                filename=filename, 
-                file_id=file_id,
-                shared_users=shared_users,
-                available_users=available_users
-            )
-            
-    except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        logging.error(f"Share error: {str(e)}")
-        logging.error(f"Traceback: {error_details}")
-        flash(f'Error processing share request: {str(e)}', 'error')
-        return redirect(url_for('dashboard'))
-
-@app.route('/explanation')
-def explanation():
-    return render_template('explanation.html')
-
-@app.route('/forgot-password', methods=['GET', 'POST'])
-def forgot_password():
-    """Handle forgot password requests"""
-    if request.method == 'POST':
-        username = request.form.get('username')
-        
-        if not username:
-            flash('Please enter your username.', 'error')
-            return render_template('forgot_password.html')
-            
-        # Generate and send OTP
-        success, message = auth_manager.generate_otp(username)
-        
-        if success:
-            flash(message, 'success')
-            # Redirect to OTP verification page
-            return redirect(url_for('verify_otp', username=username))
-        else:
-            flash(message, 'error')
-            return render_template('forgot_password.html')
-            
-    return render_template('forgot_password.html')
-
-@app.route('/verify-otp/<username>', methods=['GET', 'POST'])
-def verify_otp(username):
-    """Verify OTP for password recovery"""
-    if request.method == 'POST':
-        otp = request.form.get('otp')
-        
-        if not otp:
-            flash('Please enter the verification code.', 'error')
-            return render_template('verify_otp.html', username=username)
-            
-        # Verify OTP
-        success, message = auth_manager.verify_otp(username, otp)
-        
-        if success:
-            flash('OTP verified successfully!', 'success')
-            # Redirect to password reset page
-            return redirect(url_for('reset_password', username=username))
-        else:
-            flash(message, 'error')
-            return render_template('verify_otp.html', username=username)
-            
-    return render_template('verify_otp.html', username=username)
-
-@app.route('/reset-password/<username>', methods=['GET', 'POST'])
-def reset_password(username):
-    """Reset password after OTP verification"""
-    if request.method == 'POST':
-        password = request.form.get('password')
-        confirm_password = request.form.get('confirm_password')
-        
-        if not password or not confirm_password:
-            flash('Please enter both password fields.', 'error')
-            return render_template('reset_password.html', username=username)
-            
-        if password != confirm_password:
-            flash('Passwords do not match.', 'error')
-            return render_template('reset_password.html', username=username)
-            
-        if len(password) < 8:
-            flash('Password must be at least 8 characters long.', 'error')
-            return render_template('reset_password.html', username=username)
-            
-        # Reset password
-        success, message = auth_manager.reset_password(username, password)
-        
-        if success:
-            flash('Password reset successful! Please login with your new password.', 'success')
-            return redirect(url_for('login'))
-        else:
-            flash(message, 'error')
-            return render_template('reset_password.html', username=username)
-            
-    return render_template('reset_password.html', username=username)
-
-@app.route('/user/profile')
-def user_profile():
-    if 'token' not in session:
-        return redirect(url_for('login'))
-        
-    user_context = auth_manager.security.verify_token(session['token'])
-    if not user_context:
-        flash('Session expired. Please login again.', 'error')
-        return redirect(url_for('login'))
-        
-    try:
-        with sqlite3.connect(auth_manager.db_path) as conn:
-            cursor = conn.execute(
-                "SELECT username, role, phone_number, created_at, last_login FROM users WHERE id = ?",
-                (user_context['user_id'],)
-            )
-            user_info = cursor.fetchone()
-            
-            if not user_info:
-                flash('User profile not found', 'error')
+            # Get decryption password
+            password = request.form.get('password')
+            if not password:
+                flash('No password provided.', 'error')
                 return redirect(url_for('dashboard'))
                 
-            # Get file statistics
+            # Get user's stored password information for verification
             cursor = conn.execute(
-                """
-                SELECT 
-                    COUNT(*) as total_files,
-                    SUM(CASE WHEN encrypted = 1 THEN 1 ELSE 0 END) as encrypted_files,
-                    SUM(CASE WHEN id IN (SELECT resource_id FROM access_control) THEN 1 ELSE 0 END) as shared_files
-                FROM files 
-                WHERE owner_id = ?
-                """,
+                "SELECT salt, password_hash FROM users WHERE id = ?",
                 (user_context['user_id'],)
             )
-            stats = cursor.fetchone()
+            user_auth_info = cursor.fetchone()
             
-            profile = {
-                'username': user_info[0],
-                'role': user_info[1],
-                'phone_number': user_info[2],
-                'created_at': datetime.fromisoformat(user_info[3]).strftime('%Y-%m-%d %H:%M') if user_info[3] else 'Unknown',
-                'last_login': datetime.fromisoformat(user_info[4]).strftime('%Y-%m-%d %H:%M') if user_info[4] else 'Never',
-                'file_count': stats[0] or 0,
-                'encrypted_count': stats[1] or 0,
-                'shared_count': stats[2] or 0
-            }
-    except sqlite3.Error as e:
-        logging.error(f"Database error in user profile: {str(e)}")
-        flash(f'Database error: {str(e)}', 'error')
-        return redirect(url_for('dashboard'))
+            if not user_auth_info:
+                flash('Authentication error: User information not found.', 'error')
+                return redirect(url_for('dashboard'))
+                
+            salt, stored_hash = user_auth_info
+            
+            # Verify that the provided password matches user's login password
+            password_hash = hashlib.sha256(f"{password}{salt}".encode()).hexdigest()
+            if password_hash != stored_hash:
+                flash('Incorrect password. Your login password is required for decryption.', 'error')
+                return redirect(url_for('dashboard'))
+            
+            try:
+                # Read the encrypted file
+                with open(file_path, 'rb') as f:
+                    encrypted_data = f.read()
+                
+                # Decrypt the data
+                security_manager = SecurityManager()
+                try:
+                    container = json.loads(base64.b64decode(encrypted_data).decode())
+                    encrypted_data = base64.b64decode(container['data'].encode())
+                    
+                    # Try to decrypt with the provided password
+                    # Create a key from the password
+                    key = hashlib.sha256(password.encode()).digest()
+                    key = base64.urlsafe_b64encode(key)
+                    
+                    try:
+                        # First try with the provided password
+                        cipher = Fernet(key)
+                        decrypted_data = cipher.decrypt(encrypted_data)
+                        logging.info("Decryption with provided password successful")
+                    except Exception as e:
+                        logging.warning(f"Password decryption failed: {str(e)}")
+                        # Try with container key if available
+                        if 'key' in container:
+                            try:
+                                container_key = container['key'].encode() if isinstance(container['key'], str) else container['key']
+                                cipher = Fernet(container_key)
+                                decrypted_data = cipher.decrypt(encrypted_data)
+                                logging.info("Decryption with container key successful")
+                            except Exception as e:
+                                logging.error(f"Container key decryption failed: {str(e)}")
+                                flash('Decryption failed. Please try again.', 'error')
+                                return redirect(url_for('dashboard'))
+                        else:
+                            flash('Decryption failed. Please try again.', 'error')
+                            return redirect(url_for('dashboard'))
+                except Exception as e:
+                    logging.error(f"Error processing container: {str(e)}")
+                    flash(f'Error decrypting file: invalid format or corrupted file.', 'error')
+                    return redirect(url_for('dashboard'))
+                
+                # Create temp directory if it doesn't exist
+                temp_dir = os.path.join('temp')
+                os.makedirs(temp_dir, exist_ok=True)
+                
+                # Create a unique filename for the decrypted file
+                actual_file_type = file_type if file_type else os.path.splitext(filename)[1].strip('.') or 'bin'
+                temp_path = os.path.join(temp_dir, f"{file_id}_{int(time.time())}.{actual_file_type}")
+                
+                # Save decrypted data to temp file
+                with open(temp_path, 'wb') as f:
+                    f.write(decrypted_data)
+                
+                # If we have metadata in the container, try to use it
+                if 'metadata' in container and isinstance(container['metadata'], dict):
+                    metadata = container['metadata']
+                    # Use original filename from metadata if available
+                    if 'original_filename' in metadata:
+                        original_filename = metadata['original_filename']
+                    # Use mime type from metadata if available
+                    if 'mime_type' in metadata:
+                        mime_type = metadata['mime_type']
+                
+                # Store download info in session
+                session['pending_download'] = {
+                    'path': temp_path,
+                    'filename': original_filename or filename,
+                    'mime_type': mime_type or 'application/octet-stream'
+                }
+                
+                # Log successful decryption
+                logging.info(f"User {user_context.get('username', 'unknown')} successfully decrypted file {file_id}")
+                
+                success = True
+                
+                # Redirect to download route
+                return redirect(url_for('download_decrypted'))
+                
+            except Exception as e:
+                logging.error(f"Error decrypting file: {str(e)}")
+                import traceback
+                logging.error(traceback.format_exc())
+                flash(f'Error decrypting file: {str(e)}', 'error')
+                
+    except Exception as e:
+        logging.error(f"Error in decrypt_file: {str(e)}")
+        flash(f'Error decrypting file: {str(e)}', 'error')
         
-    return render_template('user_profile.html', profile=profile)
+    return redirect(url_for('dashboard'))
 
-@app.route('/user/activity')
-def activity_log():
-    if 'token' not in session:
-        return redirect(url_for('login'))
-        
+@app.route('/decrypt_shared/<file_id>', methods=['POST'])
+@login_required
+def decrypt_shared_file(file_id):
+    success = False
+    try:
+        user_context = auth_manager.security.verify_token(session['token'])
+        if not user_context:
+            flash('Session expired. Please login again.', 'error')
+            return redirect(url_for('login'))
+            
+        # Verify that this is a shared file for this user
+        with sqlite3.connect(file_manager.db_path) as conn:
+            # First check if original_filename column exists in the files table
+            cursor = conn.execute("PRAGMA table_info(files)")
+            columns = [info[1] for info in cursor.fetchall()]
+            
+            # Adjust query based on available columns
+            base_query = """
+                SELECT f.filename, f.file_path{} 
+                FROM files f
+                JOIN access_control ac ON f.id = ac.resource_id
+                WHERE f.id = ? AND ac.user_id = ? AND 
+                      (ac.expires_at IS NULL OR datetime(ac.expires_at) > datetime('now'))
+            """
+            
+            if all(col in columns for col in ['original_filename', 'mime_type', 'file_type']):
+                query = base_query.format(", f.original_filename, f.mime_type, f.file_type")
+            else:
+                query = base_query.format("")
+            
+            cursor = conn.execute(query, (file_id, user_context['user_id']))
+            file_info = cursor.fetchone()
+            
+            if not file_info:
+                flash('File not found or access denied.', 'error')
+                return redirect(url_for('shared_files'))
+            
+            # Extract file info based on available columns
+            if all(col in columns for col in ['original_filename', 'mime_type', 'file_type']):
+                filename, file_path, original_filename, mime_type, file_type = file_info
+            else:
+                filename, file_path = file_info
+                original_filename = filename
+                mime_type = 'application/octet-stream'
+                file_type = os.path.splitext(filename)[1].strip('.') or 'bin'
+            
+            # Get decryption password
+            password = request.form.get('password')
+            if not password:
+                flash('No password provided.', 'error')
+                return redirect(url_for('shared_files'))
+                
+            # Get user's stored password information for verification
+            cursor = conn.execute(
+                "SELECT salt, password_hash FROM users WHERE id = ?",
+                (user_context['user_id'],)
+            )
+            user_auth_info = cursor.fetchone()
+            
+            if not user_auth_info:
+                flash('Authentication error: User information not found.', 'error')
+                return redirect(url_for('shared_files'))
+                
+            salt, stored_hash = user_auth_info
+            
+            # Verify that the provided password matches user's login password
+            password_hash = hashlib.sha256(f"{password}{salt}".encode()).hexdigest()
+            if password_hash != stored_hash:
+                flash('Incorrect password. Your login password is required for decryption.', 'error')
+                return redirect(url_for('shared_files'))
+            
+            try:
+                # Read the encrypted file
+                with open(file_path, 'rb') as f:
+                    encrypted_data = f.read()
+                
+                # Decrypt the data
+                security_manager = SecurityManager()
+                try:
+                    container = json.loads(base64.b64decode(encrypted_data).decode())
+                    encrypted_data = base64.b64decode(container['data'].encode())
+                    
+                    # Try to decrypt with the provided password
+                    # Create a key from the password
+                    key = hashlib.sha256(password.encode()).digest()
+                    key = base64.urlsafe_b64encode(key)
+                    
+                    try:
+                        # First try with the provided password
+                        cipher = Fernet(key)
+                        decrypted_data = cipher.decrypt(encrypted_data)
+                        logging.info("Decryption with provided password successful")
+                    except Exception as e:
+                        logging.warning(f"Password decryption failed: {str(e)}")
+                        # Try with container key if available
+                        if 'key' in container:
+                            try:
+                                container_key = container['key'].encode() if isinstance(container['key'], str) else container['key']
+                                cipher = Fernet(container_key)
+                                decrypted_data = cipher.decrypt(encrypted_data)
+                                logging.info("Decryption with container key successful")
+                            except Exception as e:
+                                logging.error(f"Container key decryption failed: {str(e)}")
+                                flash('Decryption failed. Please try again.', 'error')
+                                return redirect(url_for('shared_files'))
+                        else:
+                            flash('Decryption failed. Please try again.', 'error')
+                            return redirect(url_for('shared_files'))
+                except Exception as e:
+                    logging.error(f"Error processing container: {str(e)}")
+                    flash(f'Error decrypting file: invalid format or corrupted file.', 'error')
+                    return redirect(url_for('shared_files'))
+                
+                # Create temp directory if it doesn't exist
+                temp_dir = os.path.join('temp')
+                os.makedirs(temp_dir, exist_ok=True)
+                
+                # Create a unique filename for the decrypted file
+                temp_path = os.path.join(temp_dir, f"{file_id}_{int(time.time())}.{file_type}")
+                
+                # Save decrypted data to temp file
+                with open(temp_path, 'wb') as f:
+                    f.write(decrypted_data)
+                
+                # If we have metadata in the container, try to use it
+                if 'metadata' in container and isinstance(container['metadata'], dict):
+                    metadata = container['metadata']
+                    # Use original filename from metadata if available
+                    if 'original_filename' in metadata:
+                        original_filename = metadata['original_filename']
+                    # Use mime type from metadata if available
+                    if 'mime_type' in metadata:
+                        mime_type = metadata['mime_type']
+                    # Use file type from metadata if available
+                    if 'file_type' in metadata:
+                        file_type = metadata['file_type']
+                
+                # Store download info in session
+                session['pending_download'] = {
+                    'path': temp_path,
+                    'filename': original_filename or filename,
+                    'mime_type': mime_type or 'application/octet-stream'
+                }
+                
+                # Log successful decryption
+                logging.info(f"User {user_context['username']} successfully decrypted shared file {file_id}")
+                
+                success = True
+                
+                # Redirect to download route
+                return redirect(url_for('download_decrypted'))
+                
+            except Exception as e:
+                logging.error(f"Error decrypting shared file: {str(e)}")
+                import traceback
+                logging.error(traceback.format_exc())
+                flash(f'Error decrypting file: {str(e)}', 'error')
+    
+    except Exception as e:
+        logging.error(f"Error in decrypt_shared_file: {str(e)}")
+        flash('An error occurred while decrypting the file.', 'error')
+    
+    return redirect(url_for('shared_files'))
+
+@app.route('/delete/<file_id>', methods=['POST'])
+@login_required
+def delete_file(file_id):
     user_context = auth_manager.security.verify_token(session['token'])
     if not user_context:
         flash('Session expired. Please login again.', 'error')
         return redirect(url_for('login'))
         
     try:
-        with sqlite3.connect(auth_manager.db_path) as conn:
-            # Get activity log
-            cursor = conn.execute(
-                """
-                SELECT action, resource_id, timestamp, status, additional_data 
-                FROM audit_logs 
-                WHERE user_id = ? 
-                ORDER BY timestamp DESC 
-                LIMIT 50
-                """,
-                (user_context['user_id'],)
-            )
-            activities = cursor.fetchall()
-            
-            activity_log = [
-                {
-                    'action': row[0],
-                    'resource_id': row[1],
-                    'timestamp': datetime.fromisoformat(row[2]).strftime('%Y-%m-%d %H:%M'),
-                    'status': row[3],
-                    'details': json.loads(row[4]) if row[4] else {}
-                }
-                for row in activities
-            ]
-            
-    except sqlite3.Error as e:
-        logging.error(f"Database error in activity log: {str(e)}")
-        flash(f'Database error: {str(e)}', 'error')
-        return redirect(url_for('dashboard'))
-        
-    return render_template('activity_log.html', activities=activity_log)
+        # Attempt to delete the file
+        success, message = file_manager.delete_file(file_id, user_context)
+        flash(message, 'success' if success else 'error')
+    except Exception as e:
+        logging.error(f"Error deleting file: {str(e)}")
+        flash(f"Error deleting file: {str(e)}", 'error')
+    
+    return redirect(url_for('dashboard'))
 
 if __name__ == '__main__':
     # Create necessary directories

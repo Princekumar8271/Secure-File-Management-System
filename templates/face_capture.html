@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}{% if action == 'register' %}Register Face{% else %}Verify Identity{% endif %}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center p-4">
+    <div class="max-w-xl w-full backdrop-blur-xl bg-black/30 p-6 rounded-2xl border border-blue-500/30 shadow-xl shadow-blue-500/10">
+        <h1 class="text-2xl font-bold mb-4 text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500">
+            {% if action == 'register' %}
+            Register Your Face
+            {% else %}
+            Secure Identity Verification
+            {% endif %}
+        </h1>
+        
+        <!-- Flash messages removed as requested -->
+        
+        <p class="mb-4 text-center text-sm text-white/90">
+            {% if action == 'register' %}
+            Position your face in the center circle with good lighting
+            {% else %}
+            Look directly at the camera for verification
+            {% endif %}
+        </p>
+        
+        <!-- Form for submission -->
+        <form id="face-form" method="POST" action="{{ url_for('register_face') if action == 'register' else url_for('verify_face_complete') }}" enctype="multipart/form-data">
+            <input type="hidden" name="image_data" id="image_data_input">
+            <input type="hidden" name="action" value="{{ action }}">
+            <input type="hidden" name="liveness_verified" id="liveness_verified" value="false">
+        </form>
+        
+        <!-- Camera container -->
+        <div id="camera-container" class="relative rounded-xl overflow-hidden border-2 border-blue-500/50 mb-5 aspect-[4/3] bg-gray-900/70">
+            <video id="video" class="w-full h-full object-cover" autoplay playsinline></video>
+            <div id="capture-overlay" class="absolute inset-0 flex items-center justify-center bg-black/70 hidden">
+                <img id="captured-image" class="max-w-full max-h-full" src="" alt="Captured face">
+            </div>
+            <div id="face-guide" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div class="w-3/5 h-4/5 border-2 border-dashed border-green-400 rounded-full opacity-70"></div>
+            </div>
+            <div id="camera-error" class="absolute inset-0 flex items-center justify-center bg-black/80 text-white p-4 rounded hidden">
+                <div class="text-center">
+                    <i class="fas fa-exclamation-triangle text-yellow-500 text-2xl mb-2"></i>
+                    <p class="font-bold">Camera Access Error</p>
+                    <p class="mt-1 text-sm">Please allow camera access</p>
+                    <button onclick="window.location.reload()" class="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">
+                        <i class="fas fa-sync mr-2"></i> Reload
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Status message -->
+        <div id="status-message" class="w-full py-2 px-3 rounded-lg bg-blue-500/20 text-blue-400 text-sm text-center mb-4 hidden"></div>
+        
+        <!-- Action buttons -->
+        <div class="flex justify-center gap-3 mb-4">
+            <button id="capture-btn" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-300 flex items-center justify-center shadow-lg">
+                <i class="fas fa-camera mr-2"></i> Capture
+            </button>
+            <button id="retry-btn" class="px-5 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-all duration-300 flex items-center justify-center shadow-lg hidden">
+                <i class="fas fa-redo mr-2"></i> Retry
+            </button>
+            <button id="submit-btn" class="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all duration-300 flex items-center justify-center shadow-lg hidden">
+                <i class="fas fa-check mr-2"></i> Submit
+            </button>
+            <a href="{% if action == 'register' %}{{ url_for('dashboard') }}{% else %}{{ url_for('login') }}{% endif %}" class="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all duration-300 flex items-center justify-center shadow-lg">
+                <i class="fas fa-times mr-2"></i> Cancel
+            </a>
+        </div>
+        
+        {% if action == 'verify' %}
+        <div class="text-yellow-400 text-xs text-center">
+            <i class="fas fa-exclamation-triangle mr-1"></i> If this isn't you, return to login and use password authentication
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const video = document.getElementById('video');
+        const captureBtn = document.getElementById('capture-btn');
+        const retryBtn = document.getElementById('retry-btn');
+        const submitBtn = document.getElementById('submit-btn');
+        const capturedImage = document.getElementById('captured-image');
+        const captureOverlay = document.getElementById('capture-overlay');
+        const faceForm = document.getElementById('face-form');
+        const imageDataInput = document.getElementById('image_data_input');
+        const statusMessage = document.getElementById('status-message');
+        const cameraError = document.getElementById('camera-error');
+        
+        let canvas = document.createElement('canvas');
+        let stream = null;
+        let capturing = false;
+        
+        // Start camera with higher resolution for better recognition
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: "user"
+                    } 
+                });
+                video.srcObject = stream;
+                captureBtn.disabled = false;
+                
+                // Display initial status message
+                showStatus('Position your face in the center circle', 'info');
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                showStatus('Camera access denied. Please allow camera access.', 'error');
+                cameraError.classList.remove('hidden');
+            }
+        }
+        
+        // Stop camera
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        }
+        
+        // Show status message
+        function showStatus(message, type = 'info') {
+            statusMessage.textContent = message;
+            statusMessage.classList.remove('hidden', 'bg-blue-500/20', 'bg-green-500/20', 'bg-red-500/20');
+            statusMessage.classList.remove('text-blue-400', 'text-green-400', 'text-red-400');
+            statusMessage.classList.remove('border-blue-500/30', 'border-green-500/30', 'border-red-500/30');
+            
+            if (type === 'error') {
+                statusMessage.classList.add('bg-red-500/20', 'text-red-400', 'border', 'border-red-500/30');
+            } else if (type === 'success') {
+                statusMessage.classList.add('bg-green-500/20', 'text-green-400', 'border', 'border-green-500/30');
+            } else {
+                statusMessage.classList.add('bg-blue-500/20', 'text-blue-400', 'border', 'border-blue-500/30');
+            }
+            
+            statusMessage.classList.remove('hidden');
+        }
+        
+        // Capture photo
+        captureBtn.addEventListener('click', function() {
+            if (capturing) return;
+            
+            capturing = true;
+            showStatus('Capturing image...', 'info');
+            
+            try {
+                // Make sure video is initialized and playing
+                if (!video.videoWidth || !video.videoHeight) {
+                    showStatus('Camera not ready. Please wait a moment and try again.', 'error');
+                    capturing = false;
+                    return;
+                }
+                
+                // Draw video frame to canvas
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                let ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Get image data URL with high quality
+                let imageDataURL = canvas.toDataURL('image/jpeg', 0.95);
+                
+                // Validate the image data
+                if (!imageDataURL || imageDataURL === 'data:,') {
+                    showStatus('Failed to capture image. Please try again.', 'error');
+                    capturing = false;
+                    return;
+                }
+                
+                // Display captured image
+                capturedImage.src = imageDataURL;
+                captureOverlay.classList.remove('hidden');
+                
+                // Show retry and submit buttons
+                captureBtn.classList.add('hidden');
+                retryBtn.classList.remove('hidden');
+                submitBtn.classList.remove('hidden');
+                
+                // Set image data in form
+                imageDataInput.value = imageDataURL;
+                
+                console.log("Image captured successfully. Data URL length: " + imageDataURL.length);
+                
+                showStatus('Image captured! Please review and submit or try again.', 'success');
+            } catch (error) {
+                console.error('Error capturing image:', error);
+                showStatus('Error capturing image. Please try again.', 'error');
+                
+                // Reset UI
+                captureOverlay.classList.add('hidden');
+                captureBtn.classList.remove('hidden');
+                retryBtn.classList.add('hidden');
+                submitBtn.classList.add('hidden');
+            } finally {
+                capturing = false;
+            }
+        });
+        
+        // Retry
+        retryBtn.addEventListener('click', function() {
+            // Hide captured image
+            captureOverlay.classList.add('hidden');
+            
+            // Show capture button
+            captureBtn.classList.remove('hidden');
+            retryBtn.classList.add('hidden');
+            submitBtn.classList.add('hidden');
+            
+            // Clear image data
+            imageDataInput.value = '';
+            
+            showStatus('Please capture a new photo', 'info');
+        });
+        
+        // Submit photo
+        submitBtn.addEventListener('click', function() {
+            if (!imageDataInput.value) {
+                showStatus('Error: No image data to submit. Please try again.', 'error');
+                return;
+            }
+            
+            showStatus('Processing your request...', 'info');
+            submitBtn.disabled = true;
+            
+            // Just submit the form directly
+            faceForm.submit();
+        });
+        
+        // Start camera when page loads
+        startCamera();
+        
+        // Cleanup when page unloads
+        window.addEventListener('beforeunload', stopCamera);
+    });
+</script>
+{% endblock %}
+
+{% block styles %}
+<style>
+    @keyframes pulse {
+        0% { opacity: 0.7; }
+        50% { opacity: 0.5; }
+        100% { opacity: 0.7; }
+    }
+    
+    #face-guide > div {
+        animation: pulse 2s infinite;
+    }
+    
+    #liveness-prompt {
+        animation: pulse 1.5s infinite;
+    }
+    
+    body {
+        background: linear-gradient(135deg, #0f172a, #1e293b);
+        background-size: cover;
+        background-attachment: fixed;
+    }
+</style>
+{% endblock %}

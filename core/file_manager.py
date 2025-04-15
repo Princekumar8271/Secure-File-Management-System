@@ -51,21 +51,69 @@ class SecureFileManager:
     def _log_operation(self, user_id: str, action: str, file_id: Optional[str], status: str, metadata: Dict = None):
         try:
             with sqlite3.connect(self.db_path, timeout=20) as conn:
+                # Create table if not exists
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS audit_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp TEXT,
+                        user_id TEXT,
+                        action TEXT,
+                        resource_id TEXT,
+                        status TEXT,
+                        additional_data TEXT
+                    )
+                """)
+
+                # Also create activity_log table for user profile display
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS activity_log (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id TEXT,
+                        operation TEXT,
+                        resource_id TEXT,
+                        timestamp TEXT,
+                        status TEXT,
+                        details TEXT
+                    )
+                """)
+                
+                # Insert into both tables for consistency
+                current_time = datetime.now().isoformat()
+                metadata_json = json.dumps(metadata or {})
+                
+                # Insert into audit_logs
                 conn.execute("""
                     INSERT INTO audit_logs 
                     (timestamp, user_id, action, resource_id, status, additional_data) 
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (
-                    datetime.now().isoformat(),
+                    current_time,
                     user_id,
                     action,
                     file_id,
                     status,
-                    json.dumps(metadata or {})
+                    metadata_json
                 ))
+                
+                # Insert into activity_log
+                conn.execute("""
+                    INSERT INTO activity_log 
+                    (user_id, operation, resource_id, timestamp, status, details) 
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    user_id,
+                    action,
+                    file_id,
+                    current_time,
+                    status,
+                    metadata_json
+                ))
+                
                 conn.commit()
         except sqlite3.Error as e:
             logging.error(f"Database error in operation logging: {str(e)}")
+            import traceback
+            logging.error(traceback.format_exc())
 
     def store_file(self, file_path: str, user_context: Dict, cloud_backup: bool = True, encryption_level: str = 'standard') -> Tuple[bool, str]:
         try:
@@ -392,3 +440,72 @@ class SecureFileManager:
             import traceback
             logging.error(traceback.format_exc())
             return False, f"Error sharing file: {str(e)}"
+
+    def delete_file(self, file_id: str, user_context: Dict) -> Tuple[bool, str]:
+        """
+        Delete a file and its associated records
+        
+        Args:
+            file_id: The ID of the file to delete
+            user_context: Dictionary containing user information
+            
+        Returns:
+            Tuple of (success, message)
+        """
+        try:
+            if not user_context or 'user_id' not in user_context:
+                return False, "Invalid user context"
+                
+            # Verify file ownership and get file path
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT file_path, owner_id FROM files WHERE id = ?",
+                    (file_id,)
+                )
+                file_info = cursor.fetchone()
+                
+                if not file_info:
+                    return False, "File not found"
+                    
+                file_path, owner_id = file_info
+                
+                # Check if user is owner
+                if owner_id != user_context['user_id']:
+                    # Check if user has admin permission
+                    cursor = conn.execute("""
+                        SELECT permission_level FROM access_control 
+                        WHERE resource_id = ? AND user_id = ? AND permission_level = 'admin'
+                        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
+                    """, (file_id, user_context['user_id']))
+                    
+                    if not cursor.fetchone():
+                        return False, "You don't have permission to delete this file"
+                
+                try:
+                    # Delete the physical file
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                except Exception as e:
+                    logging.error(f"Error deleting physical file: {str(e)}")
+                    # Continue with database cleanup even if physical file deletion fails
+                
+                # Delete associated records
+                conn.execute("DELETE FROM access_control WHERE resource_id = ?", (file_id,))
+                conn.execute("DELETE FROM files WHERE id = ?", (file_id,))
+                conn.commit()
+                
+                # Log the operation
+                self._log_operation(
+                    user_context['user_id'],
+                    'delete',
+                    file_id,
+                    'success',
+                    {'file_path': file_path}
+                )
+                
+                return True, "File deleted successfully"
+                
+        except Exception as e:
+            logging.error(f"Error deleting file: {str(e)}")
+            return False, f"Error deleting file: {str(e)}"
+            return False, f"Error deleting file: {str(e)}"

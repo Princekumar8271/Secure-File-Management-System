@@ -3,160 +3,123 @@
 {% block title %}Activity Log - Secure File Manager{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="bg-slate-800/80 backdrop-blur-lg rounded-2xl shadow-xl p-6 space-y-8">
-        <!-- Header Section -->
-        <div class="text-center pb-6 border-b border-slate-700">
-            <h2 class="flex items-center justify-center text-3xl font-semibold text-white gap-2">
-                <i class="fas fa-history"></i>
-                Activity Log
-            </h2>
-            <p class="mt-2 text-slate-400 text-lg">Track and monitor all your file activities</p>
-        </div>
-
-        <!-- Filters Section -->
-        <div class="bg-slate-900/50 backdrop-blur-md rounded-xl p-6 border border-slate-700/50">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <!-- Action Type Filter -->
-                <div class="space-y-2">
-                    <label for="action-filter" class="flex items-center text-white font-medium gap-2">
-                        <i class="fas fa-filter text-blue-500"></i>
-                        Action Type
-                    </label>
-                    <select id="action-filter" class="w-full bg-slate-800/80 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                        <option value="all">All Actions</option>
-                        <option value="upload">Upload</option>
-                        <option value="download">Download</option>
-                        <option value="share">Share</option>
-                        <option value="delete">Delete</option>
-                    </select>
-                </div>
-
-                <!-- Time Range Filter -->
-                <div class="space-y-2">
-                    <label for="date-filter" class="flex items-center text-white font-medium gap-2">
-                        <i class="fas fa-calendar text-blue-500"></i>
-                        Time Range
-                    </label>
-                    <select id="date-filter" class="w-full bg-slate-800/80 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                        <option value="7">Last 7 Days</option>
-                        <option value="30">Last 30 Days</option>
-                        <option value="90">Last 90 Days</option>
-                        <option value="all">All Time</option>
-                    </select>
-                </div>
-
-                <!-- Status Filter -->
-                <div class="space-y-2">
-                    <label for="status-filter" class="flex items-center text-white font-medium gap-2">
-                        <i class="fas fa-check-circle text-blue-500"></i>
-                        Status
-                    </label>
-                    <select id="status-filter" class="w-full bg-slate-800/80 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                        <option value="all">All Statuses</option>
-                        <option value="success">Success</option>
-                        <option value="failed">Failed</option>
-                        <option value="pending">Pending</option>
-                    </select>
-                </div>
+<div class="max-w-7xl mx-auto px-4 py-8">
+    <h2 class="text-center text-3xl font-bold mb-8 bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent drop-shadow-[0_0_8px_rgba(59,130,246,0.4)]">Activity Log</h2>
+    
+    <div class="glass-card blue-glow backdrop-blur-xl p-8 rounded-xl border border-blue-500/20 shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-300">
+        <!-- Filters -->
+        <div class="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="filter-group">
+                <label class="block text-gray-300 mb-2">Action Type</label>
+                <select id="action-filter" class="w-full bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2 text-white">
+                    <option value="all">All Actions</option>
+                    <option value="login">Login</option>
+                    <option value="file">File Operations</option>
+                    <option value="security">Security Events</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="block text-gray-300 mb-2">Time Range</label>
+                <select id="time-filter" class="w-full bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2 text-white">
+                    <option value="all">All Time</option>
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label class="block text-gray-300 mb-2">Status</label>
+                <select id="status-filter" class="w-full bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2 text-white">
+                    <option value="all">All Status</option>
+                    <option value="success">Success</option>
+                    <option value="error">Error</option>
+                    <option value="warning">Warning</option>
+                </select>
             </div>
         </div>
-
-        <!-- Table Section -->
-        <div class="bg-slate-900/50 backdrop-blur-md rounded-xl p-6 border border-slate-700/50 overflow-x-auto">
-            <table class="w-full">
+        
+        <!-- Activity Table -->
+        <div class="overflow-x-auto">
+            <table class="min-w-full glass-inner rounded-lg overflow-hidden">
                 <thead>
-                    <tr class="text-left text-slate-400 text-sm uppercase tracking-wider">
-                        <th class="px-6 py-4">Action</th>
-                        <th class="px-6 py-4">Resource</th>
-                        <th class="px-6 py-4">Timestamp</th>
-                        <th class="px-6 py-4">Status</th>
-                        <th class="px-6 py-4">Details</th>
+                    <tr class="bg-gray-800/70 text-left">
+                        <th class="px-6 py-3 text-white font-semibold">Action</th>
+                        <th class="px-6 py-3 text-white font-semibold">Timestamp</th>
+                        <th class="px-6 py-3 text-white font-semibold">Status</th>
+                        <th class="px-6 py-3 text-white font-semibold">Details</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-700/50">
-                    {% for activity in activities %}
-                    <tr class="group hover:-translate-y-0.5 transition-transform duration-200"
-                        data-action="{{ activity.action }}"
-                        data-status="{{ activity.status }}"
-                        data-timestamp="{{ activity.timestamp }}">
-                        <td class="px-6 py-4">
-                            <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 flex items-center justify-center bg-blue-500/10 rounded-lg">
-                                    {% if activity.action == 'upload' %}
-                                        <i class="fas fa-upload text-blue-500"></i>
-                                    {% elif activity.action == 'download' %}
-                                        <i class="fas fa-download text-blue-500"></i>
-                                    {% elif activity.action == 'share' %}
-                                        <i class="fas fa-share-alt text-blue-500"></i>
-                                    {% elif activity.action == 'delete' %}
-                                        <i class="fas fa-trash text-blue-500"></i>
+                <tbody>
+                    {% if activities %}
+                        {% for activity in activities %}
+                        <tr class="border-t border-gray-800/50 hover:bg-gray-800/50 transition-colors" data-action="{{ activity.action }}" data-status="{{ activity.status }}">
+                            <td class="px-6 py-4 text-white">
+                                <div class="flex items-center">
+                                    {% if 'login' in activity.action %}
+                                    <i class="fas fa-sign-in-alt text-blue-400 mr-2"></i>
+                                    {% elif 'file' in activity.action or 'decrypt' in activity.action or 'encrypt' in activity.action %}
+                                    <i class="fas fa-file-alt text-green-400 mr-2"></i>
+                                    {% elif 'face' in activity.action %}
+                                    <i class="fas fa-user-shield text-purple-400 mr-2"></i>
+                                    {% elif 'password' in activity.action %}
+                                    <i class="fas fa-key text-yellow-400 mr-2"></i>
                                     {% else %}
-                                        <i class="fas fa-info-circle text-blue-500"></i>
+                                    <i class="fas fa-info-circle text-gray-400 mr-2"></i>
                                     {% endif %}
+                                    {{ activity.action|replace('_', ' ')|title }}
                                 </div>
-                                <span class="text-white font-medium">{{ activity.action|capitalize }}</span>
-                            </div>
-                        </td>
-                        <td class="px-6 py-4">
-                            <div class="flex items-center gap-3">
-                                <i class="fas fa-file text-slate-400"></i>
-                                <span class="text-slate-400 font-mono text-sm">{{ activity.resource_id }}</span>
-                            </div>
-                        </td>
-                        <td class="px-6 py-4">
-                            <div class="flex items-center gap-3">
-                                <i class="fas fa-clock text-slate-400"></i>
-                                <span class="text-slate-400">{{ activity.timestamp }}</span>
-                            </div>
-                        </td>
-                        <td class="px-6 py-4">
-                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium
-                                {% if activity.status == 'success' %}
-                                    bg-green-500/10 text-green-500
-                                {% elif activity.status == 'failed' %}
-                                    bg-red-500/10 text-red-500
-                                {% else %}
-                                    bg-yellow-500/10 text-yellow-500
-                                {% endif %}">
-                                <i class="fas fa-circle text-xs"></i>
-                                {{ activity.status|capitalize }}
-                            </span>
-                        </td>
-                        <td class="px-6 py-4">
-                            <button onclick="showDetails('{{ activity.details|tojson|safe }}')"
-                                    class="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium
-                                           bg-blue-500/10 text-blue-500 border border-blue-500/20
-                                           hover:bg-blue-500/20 transition-colors duration-200">
-                                <i class="fas fa-info-circle"></i>
-                                Details
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
+                            </td>
+                            <td class="px-6 py-4 text-white">{{ activity.timestamp }}</td>
+                            <td class="px-6 py-4">
+                                <span class="px-2 py-1 rounded-full text-xs font-semibold
+                                    {% if activity.status == 'success' %}bg-green-900/60 text-green-400
+                                    {% elif activity.status == 'error' %}bg-red-900/60 text-red-400
+                                    {% elif activity.status == 'warning' %}bg-yellow-900/60 text-yellow-400
+                                    {% else %}bg-gray-900/60 text-gray-400{% endif %}">
+                                    {{ activity.status|title }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 text-white">
+                                <button class="view-details px-3 py-1 bg-blue-600/40 hover:bg-blue-600/60 rounded-md text-sm text-blue-300 transition-colors duration-300" 
+                                        data-details="{{ activity.details|tojson }}" 
+                                        data-resource="{{ activity.resource_id or 'N/A' }}">
+                                    View Details
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="4" class="px-6 py-8 text-center text-gray-300">
+                                <i class="fas fa-info-circle mr-2"></i> No activity logs found
+                            </td>
+                        </tr>
+                    {% endif %}
                 </tbody>
             </table>
         </div>
     </div>
+</div>
 
-    <!-- Details Modal -->
-    <div id="details-modal" class="hidden fixed inset-0 z-50 overflow-y-auto">
-        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
-            <div class="fixed inset-0 transition-opacity" aria-hidden="true">
-                <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
-            </div>
-            <div class="bg-slate-800/90 backdrop-blur-xl rounded-2xl overflow-hidden shadow-xl transform transition-all sm:max-w-2xl sm:w-full">
-                <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
-                    <h3 class="text-xl font-semibold text-white flex items-center gap-2">
-                        <i class="fas fa-info-circle text-blue-500"></i>
-                        Activity Details
-                    </h3>
-                    <button class="close text-slate-400 hover:text-red-500 transition-colors">
-                        <i class="fas fa-times text-2xl"></i>
-                    </button>
+<!-- Modal for viewing details -->
+<div id="details-modal" class="fixed inset-0 flex items-center justify-center z-50 hidden">
+    <div class="modal-backdrop fixed inset-0 bg-black/70 backdrop-blur-sm"></div>
+    <div class="modal-content glass-card blue-glow backdrop-blur-xl p-6 rounded-xl border border-blue-500/20 shadow-[0_8px_32px_rgba(0,0,0,0.3)] max-w-2xl w-full mx-4 z-10">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold text-white">Activity Details</h3>
+            <button id="close-modal" class="text-gray-300 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="grid grid-cols-1 gap-4">
+                <div class="glass-inner p-4 rounded-lg">
+                    <h4 class="text-gray-300 text-sm mb-1">Resource ID</h4>
+                    <p id="resource-id" class="text-white"></p>
                 </div>
-                <div id="details-content" class="p-6">
-                    <pre class="bg-slate-900/50 rounded-lg p-4 text-slate-300 font-mono text-sm overflow-x-auto border border-slate-700/50"></pre>
+                <div class="glass-inner p-4 rounded-lg">
+                    <h4 class="text-gray-300 text-sm mb-1">Additional Data</h4>
+                    <pre id="details-content" class="text-white text-sm overflow-x-auto whitespace-pre-wrap"></pre>
                 </div>
             </div>
         </div>
@@ -167,77 +130,61 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Filter functionality
     const actionFilter = document.getElementById('action-filter');
-    const dateFilter = document.getElementById('date-filter');
+    const timeFilter = document.getElementById('time-filter');
     const statusFilter = document.getElementById('status-filter');
-    const activityRows = document.querySelectorAll('tbody tr');
+    const rows = document.querySelectorAll('tbody tr');
     
     function applyFilters() {
-        const selectedAction = actionFilter.value;
-        const selectedStatus = statusFilter.value;
-        const selectedDays = parseInt(dateFilter.value);
-        const currentDate = new Date();
+        const actionValue = actionFilter.value;
+        const statusValue = statusFilter.value;
         
-        activityRows.forEach(row => {
-            const action = row.dataset.action;
-            const status = row.dataset.status;
-            const timestamp = new Date(row.dataset.timestamp);
+        rows.forEach(row => {
+            const action = row.getAttribute('data-action');
+            const status = row.getAttribute('data-status');
+            let show = true;
             
-            const actionMatch = selectedAction === 'all' || action === selectedAction;
-            const statusMatch = selectedStatus === 'all' || status === selectedStatus;
-            
-            let dateMatch = true;
-            if (selectedDays !== 'all') {
-                const daysDiff = (currentDate - timestamp) / (1000 * 60 * 60 * 24);
-                dateMatch = daysDiff <= selectedDays;
+            if (actionValue !== 'all' && !action.includes(actionValue)) {
+                show = false;
             }
             
-            row.classList.toggle('hidden', !(actionMatch && statusMatch && dateMatch));
+            if (statusValue !== 'all' && status !== statusValue) {
+                show = false;
+            }
+            
+            row.style.display = show ? '' : 'none';
         });
     }
     
     actionFilter.addEventListener('change', applyFilters);
-    dateFilter.addEventListener('change', applyFilters);
     statusFilter.addEventListener('change', applyFilters);
-});
-
-// Modal functionality
-const modal = document.getElementById('details-modal');
-const closeBtn = document.querySelector('.close');
-
-function showDetails(details) {
-    const detailsContent = document.getElementById('details-content').querySelector('pre');
-    const parsedDetails = typeof details === 'string' ? JSON.parse(details) : details;
-    detailsContent.textContent = JSON.stringify(parsedDetails, null, 2);
-    modal.classList.remove('hidden');
     
-    // Add animation classes
-    modal.querySelector('.bg-slate-800/90').classList.add('animate-fade-in');
-}
-
-closeBtn.onclick = function() {
-    modal.classList.add('hidden');
-}
-
-window.onclick = function(event) {
-    if (event.target === modal) {
-        modal.classList.add('hidden');
-    }
-}
-
-// Add fade-in animation for rows
-document.addEventListener('DOMContentLoaded', function() {
-    const rows = document.querySelectorAll('tbody tr');
-    rows.forEach((row, index) => {
-        row.style.opacity = '0';
-        row.style.transform = 'translateY(10px)';
-        
-        setTimeout(() => {
-            row.style.opacity = '1';
-            row.style.transform = 'translateY(0)';
-            row.style.transition = 'all 0.3s ease';
-        }, index * 50);
+    // Modal functionality
+    const detailsModal = document.getElementById('details-modal');
+    const modalBackdrop = document.querySelector('.modal-backdrop');
+    const closeModal = document.getElementById('close-modal');
+    const detailsContent = document.getElementById('details-content');
+    const resourceId = document.getElementById('resource-id');
+    
+    document.querySelectorAll('.view-details').forEach(button => {
+        button.addEventListener('click', function() {
+            const details = JSON.parse(this.getAttribute('data-details'));
+            const resource = this.getAttribute('data-resource');
+            
+            resourceId.textContent = resource;
+            detailsContent.textContent = JSON.stringify(details, null, 2);
+            
+            detailsModal.classList.remove('hidden');
+        });
     });
+    
+    function hideModal() {
+        detailsModal.classList.add('hidden');
+    }
+    
+    closeModal.addEventListener('click', hideModal);
+    modalBackdrop.addEventListener('click', hideModal);
 });
 </script>
 {% endblock %} 

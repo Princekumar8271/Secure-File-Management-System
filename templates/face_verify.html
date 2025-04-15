@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Verify Your Face{% endblock %}
+
+{% block content %}
+        <h1 class="text-3xl font-bold mb-6 text-center text-blue-400 drop-shadow-md">Multi-Factor Authentication</h1>
+        
+        <div class="mb-8 text-center">
+            <p class="mb-4 text-white/90">Hello, <span class="font-semibold">{{ username }}</span>! Please complete your face verification to continue.</p>
+            
+            <!-- Flash messages removed as requested -->
+            
+            <div class="p-4 bg-blue-500/20 rounded-lg mb-6">
+                <p class="text-blue-400 font-medium mb-2"><i class="fas fa-shield-alt mr-2"></i> Second Factor Required</p>
+                <p class="text-white/80 text-sm">Your password has been verified. For enhanced security, we now need to verify your face as the second authentication factor.</p>
+            </div>
+        </div>
+        
+        <div class="flex justify-center">
+            <div class="w-full max-w-md border border-white/10 rounded-lg p-6 bg-gray-800/50 hover:bg-gray-800/70 transition-all duration-300">
+                <h3 class="text-xl font-semibold mb-4 text-center">Complete Face Authentication</h3>
+                <div class="flex flex-col items-center">
+                    <p class="mb-4 text-white/90">Please use your webcam to complete the verification process:</p>
+                    <a href="{{ url_for('face_capture', action='verify') }}" class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-full transition-all duration-300 inline-flex items-center">
+                        <i class="fas fa-camera mr-2"></i> Launch Camera for Verification
+                    </a>
+                    <p class="text-sm text-white/70 mt-4">Position your face in a well-lit area for accurate verification.</p>
+                    <div class="p-4 bg-blue-500/20 rounded-lg mt-6 text-center">
+                        <p class="text-blue-300 text-sm">
+                            <i class="fas fa-info-circle mr-1"></i> For security reasons, only live camera verification is allowed.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-8 border-t border-white/10 pt-6">
+            <div class="flex flex-col items-center">
+                <p class="text-white/90 mb-4">Having trouble verifying your face?</p>
+                <div class="flex flex-wrap gap-4 justify-center">
+                    <a href="{{ url_for('login') }}" class="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-full transition-all duration-300 inline-flex items-center">
+                        <i class="fas fa-arrow-left mr-2"></i> Back to Login
+                    </a>
+                    <a href="{{ url_for('forgot_password') }}" class="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-full transition-all duration-300 inline-flex items-center">
+                        <i class="fas fa-sms mr-2"></i> Use SMS Recovery
+                    </a>
+                </div>
+                <div class="mt-6 p-4 bg-yellow-500/10 rounded-lg">
+                    <p class="text-yellow-400 text-sm"><i class="fas fa-exclamation-triangle mr-2"></i> If this isn't you attempting to log in, your account may be targeted. Please change your password immediately.</p>
+                </div>
+            </div>
+        </div>
+{% endblock %}

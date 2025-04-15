@@ -11,7 +11,7 @@ class AuthenticationManager:
         self.db_path = db_path
         self.security = SecurityManager()
         self._setup_logging()
-        self._initialize_database()
+        self._setup_database()
         
     def _setup_logging(self):
         logging.basicConfig(
@@ -20,68 +20,43 @@ class AuthenticationManager:
             format='%(asctime)s - %(levelname)s - %(message)s'
         )
 
-    def _initialize_database(self):
-        with sqlite3.connect(self.db_path, timeout=30) as conn:
-            conn.execute("PRAGMA journal_mode=WAL")  # Write-Ahead Logging for better concurrency
-            conn.execute("PRAGMA busy_timeout=5000")  # Set busy timeout
-            conn.execute("PRAGMA synchronous=NORMAL")  # Faster writes with reasonable safety
-            
-            # Drop existing users table if it exists
-            conn.execute("DROP TABLE IF EXISTS users")
-            
-            # Create users table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id TEXT PRIMARY KEY,
-                    username TEXT UNIQUE,
-                    password_hash TEXT,
-                    salt TEXT,
-                    role TEXT,
-                    created_at TEXT,
-                    last_login TEXT,
-                    phone_number TEXT
-                )
-            """)
-            
-            # Create access control table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS access_control (
-                    resource_id TEXT,
-                    user_id TEXT,
-                    permission_level TEXT,
-                    granted_by TEXT,
-                    granted_at TEXT,
-                    expires_at TEXT,
-                    UNIQUE(resource_id, user_id)
-                )
-            """)
-            
-            # Create password recovery table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS password_recovery (
-                    username TEXT PRIMARY KEY,
-                    otp TEXT,
-                    expires_at TEXT,
-                    attempts INTEGER DEFAULT 0
-                )
-            """)
-            
-            # Create single audit logs table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS audit_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT,
-                    user_id TEXT,
-                    action TEXT,
-                    resource_id TEXT,
-                    status TEXT,
-                    ip_address TEXT,
-                    user_agent TEXT,
-                    additional_data TEXT
-                )
-            """)
-            
-            conn.commit()
+    def _setup_database(self):
+        """Initialize the SQLite database with required tables"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # Create users table
+                conn.execute('''
+                    CREATE TABLE IF NOT EXISTS users (
+                        id TEXT PRIMARY KEY,
+                        username TEXT UNIQUE NOT NULL,
+                        password_hash TEXT NOT NULL,
+                        salt TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        last_login TEXT,
+                        phone_number TEXT,
+                        role TEXT DEFAULT 'user',
+                        failed_attempts INTEGER DEFAULT 0,
+                        failed_face_attempts INTEGER DEFAULT 0,
+                        last_failed_attempt TEXT,
+                        locked BOOLEAN DEFAULT 0
+                    )
+                ''')
+                
+                # Create otp table for password recovery
+                conn.execute('''
+                    CREATE TABLE IF NOT EXISTS otp (
+                        username TEXT PRIMARY KEY,
+                        code TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        expires_at TEXT NOT NULL,
+                        FOREIGN KEY (username) REFERENCES users(username)
+                    )
+                ''')
+                
+                logging.info("Database tables created successfully")
+        except sqlite3.Error as e:
+            logging.error(f"Error setting up database: {str(e)}")
+            raise
 
     def register(self, username: str, password: str, phone_number: str = None, role: str = "user") -> Tuple[bool, str]:
         """
@@ -162,8 +137,8 @@ class AuthenticationManager:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute(
-                    "SELECT id, username, role, phone_number FROM users WHERE username = ?",
-                    (username,)
+                    "SELECT id, username, role, phone_number FROM users WHERE id = ? OR username = ?",
+                    (username, username)
                 )
                 user = cursor.fetchone()
                 
@@ -178,6 +153,36 @@ class AuthenticationManager:
         except sqlite3.Error as e:
             logging.error(f"Database error while getting user: {str(e)}")
             return None
+    
+    def login_without_password(self, username: str) -> Tuple[bool, Optional[str]]:
+        """Login user without password verification (for face authentication)"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT id, role FROM users WHERE username = ?",
+                    (username,)
+                )
+                user = cursor.fetchone()
+                
+                if not user:
+                    return False, None
+                    
+                user_id, role = user
+                
+                # Update last login
+                self._update_last_login(user_id)
+                
+                # Generate token
+                token = self.security.generate_token(user_id, role)
+                
+                # Log the face-based login
+                self._log_audit(user_id, "face_login", "Logged in using face authentication")
+                
+                return True, token
+                
+        except sqlite3.Error as e:
+            logging.error(f"Database error during face login: {str(e)}")
+            return False, None
     
     def generate_otp(self, username: str) -> Tuple[bool, str]:
         """Generate a one-time password for account recovery"""
@@ -204,12 +209,12 @@ class AuthenticationManager:
             
             with sqlite3.connect(self.db_path) as conn:
                 # Remove any existing OTP for this user
-                conn.execute("DELETE FROM password_recovery WHERE username = ?", (username,))
+                conn.execute("DELETE FROM otp WHERE username = ?", (username,))
                 
                 # Insert new OTP
                 conn.execute(
-                    "INSERT INTO password_recovery (username, otp, expires_at, attempts) VALUES (?, ?, ?, 0)",
-                    (username, otp, expiry_time)
+                    "INSERT INTO otp (username, code, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                    (username, otp, datetime.now().isoformat(), expiry_time)
                 )
             
             # Log OTP generation
@@ -313,7 +318,7 @@ class AuthenticationManager:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute(
-                    "SELECT otp, expires_at, attempts FROM password_recovery WHERE username = ?",
+                    "SELECT code, expires_at FROM otp WHERE username = ?",
                     (username,)
                 )
                 recovery_info = cursor.fetchone()
@@ -321,34 +326,19 @@ class AuthenticationManager:
                 if not recovery_info:
                     return False, "No recovery request found"
                 
-                stored_otp, expires_at, attempts = recovery_info
+                stored_otp, expires_at = recovery_info
                 
                 # Check if OTP is expired
                 if datetime.fromisoformat(expires_at) < datetime.now():
-                    conn.execute("DELETE FROM password_recovery WHERE username = ?", (username,))
+                    conn.execute("DELETE FROM otp WHERE username = ?", (username,))
                     return False, "OTP has expired. Please request a new one."
-                
-                # Check if max attempts exceeded (5 attempts)
-                if attempts >= 5:
-                    conn.execute("DELETE FROM password_recovery WHERE username = ?", (username,))
-                    return False, "Too many failed attempts. Please request a new OTP."
-                
-                # Update attempt count
-                conn.execute(
-                    "UPDATE password_recovery SET attempts = attempts + 1 WHERE username = ?",
-                    (username,)
-                )
                 
                 # Verify OTP
                 if otp != stored_otp:
-                    remaining_attempts = 5 - (attempts + 1)
-                    return False, f"Invalid OTP. {remaining_attempts} attempts remaining."
+                    return False, "Invalid OTP"
                 
                 # OTP is valid - mark as verified but don't delete yet (will be deleted after password reset)
-                conn.execute(
-                    "UPDATE password_recovery SET attempts = -1 WHERE username = ?",  # -1 means verified
-                    (username,)
-                )
+                conn.execute("DELETE FROM otp WHERE username = ?", (username,))
                 
                 return True, "OTP verified successfully"
                 
@@ -362,12 +352,12 @@ class AuthenticationManager:
             with sqlite3.connect(self.db_path) as conn:
                 # Check if OTP was verified
                 cursor = conn.execute(
-                    "SELECT attempts FROM password_recovery WHERE username = ?",
+                    "SELECT code FROM otp WHERE username = ?",
                     (username,)
                 )
                 recovery_info = cursor.fetchone()
                 
-                if not recovery_info or recovery_info[0] != -1:  # -1 means verified
+                if not recovery_info:
                     return False, "OTP verification required before password reset"
                 
                 # Get user information
@@ -393,7 +383,7 @@ class AuthenticationManager:
                 )
                 
                 # Clear recovery information
-                conn.execute("DELETE FROM password_recovery WHERE username = ?", (username,))
+                conn.execute("DELETE FROM otp WHERE username = ?", (username,))
                 
                 # Log password reset
                 self._log_audit(user_id, "password_reset", "Password reset successful")
@@ -438,3 +428,127 @@ class AuthenticationManager:
                 conn.commit()
         except sqlite3.Error as e:
             logging.error(f"Database error in audit logging: {str(e)}")
+
+    def get_user_profile(self, user_id: str) -> dict:
+        """Get comprehensive user profile information
+        
+        Args:
+            user_id: The user ID to fetch the profile for
+            
+        Returns:
+            Dictionary containing user profile data
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # Get basic user information
+                cursor = conn.execute(
+                    """SELECT username, role, phone_number, created_at, last_login 
+                       FROM users WHERE id = ?""",
+                    (user_id,)
+                )
+                user = cursor.fetchone()
+                
+                if not user:
+                    return None
+                    
+                username, role, phone_number, created_at, last_login = user
+                
+                # Get file statistics
+                cursor = conn.execute(
+                    """SELECT 
+                        COUNT(*) as total_files,
+                        SUM(CASE WHEN encrypted = 1 THEN 1 ELSE 0 END) as encrypted_files
+                       FROM files 
+                       WHERE owner_id = ?""",
+                    (user_id,)
+                )
+                file_stats = cursor.fetchone()
+                total_files, encrypted_files = file_stats if file_stats else (0, 0)
+                
+                # Get count of shared files (files shared with others)
+                cursor = conn.execute(
+                    """SELECT COUNT(DISTINCT resource_id) 
+                       FROM access_control 
+                       WHERE granted_by = ?""",
+                    (user_id,)
+                )
+                result = cursor.fetchone()
+                shared_out = result[0] if result else 0
+                
+                # Get count of files shared with this user
+                cursor = conn.execute(
+                    """SELECT COUNT(DISTINCT resource_id) 
+                       FROM access_control 
+                       WHERE user_id = ?""",
+                    (user_id,)
+                )
+                result = cursor.fetchone()
+                shared_with = result[0] if result else 0
+                
+                # Get recent activity
+                cursor = conn.execute(
+                    """SELECT action, timestamp 
+                       FROM audit_logs 
+                       WHERE user_id = ? 
+                       ORDER BY timestamp DESC 
+                       LIMIT 5""",
+                    (user_id,)
+                )
+                recent_activity = [
+                    {
+                        'action': row[0],
+                        'timestamp': datetime.fromisoformat(row[1]).strftime('%Y-%m-%d %H:%M') if row[1] else ''
+                    } for row in cursor.fetchall()
+                ]
+                
+                return {
+                    'username': username,
+                    'role': role,
+                    'phone_number': phone_number,
+                    'created_at': datetime.fromisoformat(created_at).strftime('%Y-%m-%d %H:%M') if created_at else 'Unknown',
+                    'last_login': datetime.fromisoformat(last_login).strftime('%Y-%m-%d %H:%M') if last_login else 'Never',
+                    'file_stats': {
+                        'total_files': total_files,
+                        'encrypted_files': encrypted_files,
+                        'shared_out': shared_out,
+                        'shared_with': shared_with
+                    },
+                    'recent_activity': recent_activity
+                }
+        except sqlite3.Error as e:
+            logging.error(f"Database error in get_user_profile: {str(e)}")
+            return {
+                'username': 'Error loading profile',
+                'error': str(e)
+            }
+
+    def get_user_by_id(self, user_id: str) -> Optional[Dict]:
+        """Get user information by user ID
+        
+        Args:
+            user_id: The user's ID
+            
+        Returns:
+            User information as a dictionary or None if not found
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT id, username, role, created_at, last_login, phone_number FROM users WHERE id = ?",
+                    (user_id,)
+                )
+                user = cursor.fetchone()
+                
+                if user:
+                    return {
+                        'id': user[0],
+                        'username': user[1],
+                        'role': user[2],
+                        'created_at': user[3],
+                        'last_login': user[4],
+                        'phone_number': user[5]
+                    }
+                return None
+        except sqlite3.Error as e:
+            logging.error(f"Database error in get_user_by_id: {str(e)}")
+            return None

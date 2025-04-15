@@ -3,234 +3,1094 @@
 {% block title %}User Profile - Secure File Manager{% endblock %}
 
 {% block content %}
-<div class="profile-container">
-    <h2>User Profile</h2>
+<div class="max-w-7xl mx-auto px-4 py-8">
+    <h2 class="text-center text-3xl font-bold mb-8 bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent drop-shadow-[0_0_8px_rgba(59,130,246,0.4)]">User Profile</h2>
     
-    <div class="profile-grid">
-        <!-- Profile Overview -->
-        <div class="profile-card">
-            <h3><i class="fas fa-user-circle"></i> Profile Overview</h3>
-            <div class="profile-info">
-                <div class="info-item">
-                    <span class="label">Username:</span>
-                    <span class="value">{{ profile.username }}</span>
+    <!-- Main Profile Section -->
+    <div class="backdrop-blur-xl p-6 rounded-xl shadow-lg border border-blue-500/20 mb-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Left Column: Profile Overview -->
+            <div>
+                <div class="flex items-center gap-3 mb-5 pb-3 border-b-2 border-blue-500/30">
+                    <i class="fas fa-user-circle text-blue-400 text-xl"></i>
+                    <h3 class="text-2xl font-bold text-white">Profile Overview</h3>
                 </div>
-                <div class="info-item">
-                    <span class="label">Role:</span>
-                    <span class="value">{{ profile.role|capitalize }}</span>
+                
+                <div class="space-y-5">
+                    <div class="flex justify-between items-center border-b border-gray-700/30 pb-3">
+                        <span class="text-gray-300 font-medium">Username</span>
+                        <span class="text-white font-semibold">{{ profile.username }}</span>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-gray-700/30 pb-3">
+                        <span class="text-gray-300 font-medium">Role</span>
+                        <span class="text-white font-semibold">{{ profile.role|capitalize }}</span>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-gray-700/30 pb-3">
+                        <span class="text-gray-300 font-medium">Account Created</span>
+                        <span class="text-white font-semibold">{{ profile.created_at }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-300 font-medium">Last Login</span>
+                        <span class="text-white font-semibold">{{ profile.last_login }}</span>
+                    </div>
                 </div>
-                <div class="info-item">
-                    <span class="label">Account Created:</span>
-                    <span class="value">{{ profile.created_at }}</span>
+            </div>
+            
+            <!-- Right Column: Security Settings -->
+            <div class="lg:border-l lg:border-blue-500/30 lg:pl-8">
+                <div class="flex items-center gap-3 mb-5 pb-3 border-b-2 border-blue-500/30">
+                    <i class="fas fa-shield-alt text-blue-400 text-xl"></i>
+                    <h3 class="text-2xl font-bold text-white">Security Settings</h3>
                 </div>
-                <div class="info-item">
-                    <span class="label">Last Login:</span>
-                    <span class="value">{{ profile.last_login }}</span>
+                
+                <div class="space-y-8">
+                    <!-- Face Authentication -->
+                    <div class="border-l-4 border-blue-500 pl-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="text-white font-semibold">Face Authentication</h4>
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold
+                                {% if face_status and face_status.registered %}
+                                bg-green-900/60 text-green-400
+                                {% else %}
+                                bg-gray-700/60 text-gray-400
+                                {% endif %}">
+                                {% if face_status and face_status.registered %}Enabled{% else %}Disabled{% endif %}
+                            </span>
+                        </div>
+                        <p class="text-gray-300 text-sm mb-3">Verify your identity with facial recognition</p>
+                        <div class="flex justify-end">
+                            {% if face_status and face_status.registered %}
+                            <form action="{{ url_for('delete_face') }}" method="POST" onsubmit="return confirm('Are you sure you want to disable face authentication?');" data-loading="true" data-loading-message="Removing face authentication...">
+                                <button type="submit" class="px-4 py-2 bg-red-600/40 hover:bg-red-600/60 text-red-300 rounded-lg transition-colors duration-300 text-sm">
+                                    Disable
+                                </button>
+                            </form>
+                            {% else %}
+                            <a href="{{ url_for('register_face') }}" class="px-4 py-2 bg-blue-600/40 hover:bg-blue-600/60 text-blue-300 rounded-lg transition-colors duration-300 text-sm">
+                                Enable
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Two-Factor Authentication -->
+                    <div class="border-l-4 border-blue-500 pl-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="text-white font-semibold">Two-Factor Authentication</h4>
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold
+                                {% if otp_status and otp_status.enabled %}
+                                bg-green-900/60 text-green-400
+                                {% else %}
+                                bg-gray-700/60 text-gray-400
+                                {% endif %}">
+                                {% if otp_status and otp_status.enabled %}Enabled{% else %}Disabled{% endif %}
+                            </span>
+                        </div>
+                        <p class="text-gray-300 text-sm mb-3">Receive verification codes via SMS or email</p>
+                        <div class="flex justify-end">
+                            {% if otp_status and otp_status.enabled %}
+                            <button type="button" id="openDisableOTPModal" class="px-4 py-2 bg-blue-600/40 hover:bg-blue-600/60 text-blue-300 rounded-lg transition-colors duration-300 text-sm">
+                                Manage OTP
+                            </button>
+                            {% else %}
+                            <button type="button" id="openEnableOTPModal" class="px-4 py-2 bg-blue-600/40 hover:bg-blue-600/60 text-blue-300 rounded-lg transition-colors duration-300 text-sm">
+                                Enable OTP
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Password -->
+                    <div class="border-l-4 border-blue-500 pl-4">
+                        <div class="mb-2">
+                            <h4 class="text-white font-semibold">Password</h4>
+                        </div>
+                        <p class="text-gray-300 text-sm mb-3">Keep your account secure with a strong password</p>
+                        <div class="flex justify-end">
+                            <a href="{{ url_for('reset_password', username=profile.username) }}" class="px-4 py-2 bg-blue-600/40 hover:bg-blue-600/60 text-blue-300 rounded-lg transition-colors duration-300 text-sm">
+                                Change Password
+                            </a>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-        
+    </div>
+    
+    <!-- Stats and Activity Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- File Statistics -->
-        <div class="stats-card">
-            <h3><i class="fas fa-chart-bar"></i> File Statistics</h3>
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <div class="stat-value">{{ profile.file_count }}</div>
-                    <div class="stat-label">Total Files</div>
+        <div class="backdrop-blur-xl p-6 rounded-xl shadow-lg border border-purple-500/20">
+            <div class="flex items-center gap-3 mb-5 pb-3 border-b-2 border-purple-500/30">
+                <i class="fas fa-chart-bar text-purple-400 text-xl"></i>
+                <h3 class="text-2xl font-bold text-white">File Statistics</h3>
+            </div>
+            
+            <div class="grid grid-cols-3 gap-4">
+                <div class="bg-black/20 p-4 rounded-lg text-center border border-purple-500/10">
+                    <span class="block text-2xl font-bold text-blue-400 mb-1">{{ profile.file_count|default(0) }}</span>
+                    <span class="text-gray-300 text-sm">Total Files</span>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-value">{{ profile.encrypted_count }}</div>
-                    <div class="stat-label">Encrypted Files</div>
+                <div class="bg-black/20 p-4 rounded-lg text-center border border-purple-500/10">
+                    <span class="block text-2xl font-bold text-green-400 mb-1">{{ profile.encrypted_count|default(0) }}</span>
+                    <span class="text-gray-300 text-sm">Encrypted</span>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-value">{{ profile.shared_count }}</div>
-                    <div class="stat-label">Shared With Users</div>
+                <div class="bg-black/20 p-4 rounded-lg text-center border border-purple-500/10">
+                    <span class="block text-2xl font-bold text-purple-400 mb-1">{{ profile.shared_count|default(0) }}</span>
+                    <span class="text-gray-300 text-sm">Shared</span>
                 </div>
             </div>
         </div>
         
         <!-- Recent Activity -->
-        <div class="activity-card">
-            <h3><i class="fas fa-history"></i> Recent Activity</h3>
-            <div class="activity-list">
-                <div class="activity-item">
-                    <div class="activity-message">
-                        <a href="{{ url_for('activity_log') }}" class="btn-view-all">View your full activity history <i class="fas fa-arrow-right"></i></a>
+        <div class="backdrop-blur-xl p-6 rounded-xl shadow-lg border border-green-500/20">
+            <div class="flex items-center gap-3 mb-5 pb-3 border-b-2 border-green-500/30">
+                <i class="fas fa-history text-green-400 text-xl"></i>
+                <h3 class="text-2xl font-bold text-white">Recent Activity</h3>
+            </div>
+            
+            <div class="flex-grow overflow-y-auto max-h-[300px] pr-2">
+                {% if profile.recent_activity %}
+                    <div class="space-y-3 mb-4">
+                        {% for activity in profile.recent_activity %}
+                        <div class="p-3 rounded-lg border border-green-500/10 bg-black/20 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <i class="fas fa-info-circle text-green-400"></i>
+                                <div>
+                                    <span class="text-white text-sm">{{ activity.action|replace('_', ' ')|title }}</span>
+                                    <span class="block text-gray-500 text-xs">{{ activity.timestamp }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
                     </div>
-                </div>
+                {% else %}
+                    <div class="p-4 rounded-lg text-center bg-black/20 border border-green-500/10">
+                        <p class="text-gray-300 text-sm">No recent activities found</p>
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="mt-4 text-center">
+                <a href="{{ url_for('activity_log') }}" class="inline-flex items-center px-4 py-2 bg-green-600/40 hover:bg-green-600/60 text-green-300 rounded-lg transition-colors duration-300 text-sm">
+                    View full activity history <i class="fas fa-arrow-right ml-2"></i>
+                </a>
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
 
-{% block styles %}
+{% block modals %}
+{{ super() }}
+
+<!-- Register Face Modal -->
+<div class="modal fade" id="registerFaceModal" tabindex="-1" role="dialog" aria-labelledby="registerFaceModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="registerFaceModalLabel">Register Face Authentication</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="camera-container">
+                    <video id="faceVideo" width="100%" autoplay></video>
+                    <canvas id="faceCanvas" style="display:none;"></canvas>
+                    <div class="camera-overlay">
+                        <div class="face-outline"></div>
+                    </div>
+                </div>
+                <div class="text-center mt-3">
+                    <p>Position your face in the center and keep still</p>
+                    <div id="captureStatus"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal" id="cancelFaceRegistration">Cancel</button>
+                <button type="button" class="btn btn-primary" id="captureFace">Capture</button>
+                <button type="button" class="btn btn-success" id="saveFace" style="display:none;">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Face Confirmation Modal -->
+<div class="modal fade" id="deleteFaceModal" tabindex="-1" role="dialog" aria-labelledby="deleteFaceModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteFaceModalLabel">Remove Face Authentication</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to remove your face authentication data?</p>
+                <p class="text-danger"><small>This action cannot be undone. You will need to register your face again to use face authentication.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteFace">Remove Face Data</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- OTP Enable Modal -->
+<div id="enableOTPModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal" id="closeEnableOTPModal">&times;</span>
+        <h2><i class="fas fa-key"></i> Enable OTP Authentication</h2>
+        
+        <div class="otp-setup-container">
+            <div class="otp-method-selection">
+                <h3>Select Verification Method</h3>
+                <div class="radio-group">
+                    <label class="radio-container">
+                        <input type="radio" name="otpMethod" value="sms" checked>
+                        <span class="radio-label">SMS Verification</span>
+                        <span class="radio-description">Receive 6-digit codes via SMS</span>
+                    </label>
+                    <label class="radio-container">
+                        <input type="radio" name="otpMethod" value="email">
+                        <span class="radio-label">Email Verification</span>
+                        <span class="radio-description">Receive verification codes via email</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div id="smsSetupForm" class="setup-form active">
+                <div class="form-group">
+                    <label for="phoneNumber">Phone Number</label>
+                    <input type="tel" id="phoneNumber" placeholder="+1 (XXX) XXX-XXXX" required>
+                    <p class="form-help">Enter your mobile number to receive verification codes</p>
+                </div>
+                <button type="button" id="sendVerificationCode" class="btn-primary">Send Verification Code</button>
+            </div>
+            
+            <div id="emailSetupForm" class="setup-form">
+                <div class="form-group">
+                    <label for="emailAddress">Email Address</label>
+                    <input type="email" id="emailAddress" value="{{ profile.email }}" placeholder="your@email.com" required>
+                    <p class="form-help">Verification codes will be sent to this email address</p>
+                </div>
+                <button type="button" id="sendEmailVerificationCode" class="btn-primary">Send Verification Code</button>
+            </div>
+            
+            <div id="verificationStep" class="verification-step">
+                <div class="form-group">
+                    <label for="verificationCode">Enter Verification Code</label>
+                    <div class="code-input-group">
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" required>
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" required>
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" required>
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" required>
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" required>
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" required>
+                    </div>
+                    <p class="form-help">Enter the 6-digit verification code sent to your device</p>
+                </div>
+                <button type="button" id="verifyOTPCode" class="btn-primary">Verify & Enable</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- OTP Disable Modal -->
+<div id="disableOTPModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal" id="closeDisableOTPModal">&times;</span>
+        <h2><i class="fas fa-shield-alt"></i> Manage OTP Authentication</h2>
+        
+        <div class="otp-management">
+            <div class="otp-status-info">
+                <div class="info-item">
+                    <span class="label">Status:</span>
+                    <span class="value status-enabled">Enabled</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Method:</span>
+                    <span class="value">{{ otp_status.method|capitalize if otp_status and otp_status.method else 'Not set' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Destination:</span>
+                    <span class="value">{{ otp_status.destination if otp_status and otp_status.destination else 'Not set' }}</span>
+                </div>
+            </div>
+            
+            <div class="management-actions">
+                <button type="button" id="changeOTPMethod" class="btn-secondary">Change Method</button>
+                <form action="{{ url_for('disable_otp') }}" method="POST" id="disableOTPForm">
+                    <button type="submit" class="btn-danger">Disable OTP Authentication</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // Face Registration Logic - Optimized
+    document.addEventListener('DOMContentLoaded', function() {
+        // Cache DOM elements once
+        const elements = {
+            video: document.getElementById('faceVideo'),
+            canvas: document.getElementById('faceCanvas'),
+            captureBtn: document.getElementById('captureFace'),
+            saveBtn: document.getElementById('saveFace'),
+            cancelBtn: document.getElementById('cancelFaceRegistration'),
+            statusDiv: document.getElementById('captureStatus'),
+            registerModal: document.getElementById('registerFaceModal'),
+            deleteModal: document.getElementById('deleteFaceModal'),
+            confirmDeleteBtn: document.getElementById('confirmDeleteFace')
+        };
+        
+        let stream = null;
+        let capturedImage = null;
+
+        // Use event delegation for modals
+        if (elements.registerModal) {
+            $(elements.registerModal).on('shown.bs.modal', initCamera);
+            $(elements.registerModal).on('hidden.bs.modal', stopCamera);
+        }
+
+        function initCamera() {
+            if (!elements.video) return;
+            
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    facingMode: "user"
+                } 
+            })
+            .then(function(s) {
+                stream = s;
+                elements.video.srcObject = stream;
+            })
+            .catch(function(err) {
+                if (elements.statusDiv) {
+                    elements.statusDiv.innerHTML = `<span class="text-danger">Camera error: ${err.message}</span>`;
+                }
+            });
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                if (elements.video) elements.video.srcObject = null;
+                stream = null;
+            }
+        }
+
+        // Attach event listeners conditionally
+        if (elements.captureBtn) {
+            elements.captureBtn.addEventListener('click', captureImage);
+        }
+        
+        if (elements.cancelBtn) {
+            elements.cancelBtn.addEventListener('click', handleCancel);
+        }
+        
+        if (elements.saveBtn) {
+            elements.saveBtn.addEventListener('click', saveFaceData);
+        }
+        
+        if (elements.confirmDeleteBtn) {
+            elements.confirmDeleteBtn.addEventListener('click', deleteFaceData);
+        }
+
+        function captureImage() {
+            if (!elements.canvas || !elements.video) return;
+            
+            // Set canvas dimensions (only once)
+            elements.canvas.width = elements.video.videoWidth;
+            elements.canvas.height = elements.video.videoHeight;
+            
+            // Capture image
+            const ctx = elements.canvas.getContext('2d');
+            ctx.drawImage(elements.video, 0, 0, elements.canvas.width, elements.canvas.height);
+            
+            // Convert to optimized JPEG instead of PNG
+            capturedImage = elements.canvas.toDataURL('image/jpeg', 0.8);
+            
+            // Update UI
+            elements.video.style.display = 'none';
+            elements.canvas.style.display = 'block';
+            elements.captureBtn.style.display = 'none';
+            elements.saveBtn.style.display = 'inline-block';
+            
+            if (elements.statusDiv) {
+                elements.statusDiv.innerHTML = '<span class="text-success">Image captured! Click Save to register your face.</span>';
+            }
+        }
+
+        function handleCancel() {
+            if (!elements.canvas) return;
+            
+            if (elements.canvas.style.display === 'block') {
+                elements.video.style.display = 'block';
+                elements.canvas.style.display = 'none';
+                elements.captureBtn.style.display = 'inline-block';
+                elements.saveBtn.style.display = 'none';
+                if (elements.statusDiv) elements.statusDiv.innerHTML = '';
+            } else {
+                $('#registerFaceModal').modal('hide');
+            }
+        }
+
+        function saveFaceData() {
+            if (!elements.statusDiv) return;
+            
+            elements.statusDiv.innerHTML = '<span class="text-info">Processing...</span>';
+            
+            // Create a form data object instead of JSON for more efficient upload
+            const formData = new FormData();
+            formData.append('image_data', capturedImage);
+            
+            fetch('/register_face', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    elements.statusDiv.innerHTML = '<span class="text-success">Face registered successfully!</span>';
+                    setTimeout(function() {
+                        $('#registerFaceModal').modal('hide');
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    elements.statusDiv.innerHTML = `<span class="text-danger">Error: ${data.message}</span>`;
+                }
+            })
+            .catch(error => {
+                elements.statusDiv.innerHTML = `<span class="text-danger">Error: ${error.message}</span>`;
+            });
+        }
+
+        function deleteFaceData() {
+            fetch('/delete_face', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    $('#deleteFaceModal').modal('hide');
+                    showNotification('Face authentication data removed successfully', 'success');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showNotification('Error: ' + data.message, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('Error: ' + error.message, 'error');
+            });
+        }
+    });
+
+    // OTP Modal Functionality - Optimized
+    document.addEventListener('DOMContentLoaded', function() {
+        // Cache DOM selectors - reduce DOM queries
+        const elements = {
+            // Modals
+            enableOTPModal: document.getElementById('enableOTPModal'),
+            disableOTPModal: document.getElementById('disableOTPModal'),
+            
+            // Buttons
+            openEnableBtn: document.getElementById('openEnableOTPModal'),
+            openDisableBtn: document.getElementById('openDisableOTPModal'),
+            closeEnableBtn: document.getElementById('closeEnableOTPModal'),
+            closeDisableBtn: document.getElementById('closeDisableOTPModal'),
+            sendSMSBtn: document.getElementById('sendVerificationCode'),
+            sendEmailBtn: document.getElementById('sendEmailVerificationCode'),
+            verifyBtn: document.getElementById('verifyOTPCode'),
+            changeMethodBtn: document.getElementById('changeOTPMethod'),
+            
+            // Forms and inputs
+            smsRadio: document.querySelector('input[value="sms"]'),
+            emailRadio: document.querySelector('input[value="email"]'),
+            smsForm: document.getElementById('smsSetupForm'),
+            emailForm: document.getElementById('emailSetupForm'),
+            verificationStep: document.getElementById('verificationStep'),
+            phoneInput: document.getElementById('phoneNumber'),
+            emailInput: document.getElementById('emailAddress'),
+            otpInputs: document.querySelectorAll('.otp-input')
+        };
+        
+        // Attach event listeners only if elements exist
+        if (elements.openEnableBtn) {
+            elements.openEnableBtn.addEventListener('click', () => {
+                if (elements.enableOTPModal) elements.enableOTPModal.style.display = 'block';
+            });
+        }
+        
+        if (elements.openDisableBtn) {
+            elements.openDisableBtn.addEventListener('click', () => {
+                if (elements.disableOTPModal) elements.disableOTPModal.style.display = 'block';
+            });
+        }
+        
+        if (elements.closeEnableBtn && elements.enableOTPModal) {
+            elements.closeEnableBtn.addEventListener('click', () => {
+                elements.enableOTPModal.style.display = 'none';
+                resetOTPForm();
+            });
+        }
+        
+        if (elements.closeDisableBtn && elements.disableOTPModal) {
+            elements.closeDisableBtn.addEventListener('click', () => {
+                elements.disableOTPModal.style.display = 'none';
+            });
+        }
+        
+        // Radio button handlers
+        if (elements.smsRadio && elements.emailRadio) {
+            elements.smsRadio.addEventListener('change', function() {
+                if (this.checked && elements.smsForm && elements.emailForm) {
+                    elements.smsForm.classList.add('active');
+                    elements.emailForm.classList.remove('active');
+                }
+            });
+            
+            elements.emailRadio.addEventListener('change', function() {
+                if (this.checked && elements.smsForm && elements.emailForm) {
+                    elements.emailForm.classList.add('active');
+                    elements.smsForm.classList.remove('active');
+                }
+            });
+        }
+        
+        // Send verification handlers
+        if (elements.sendSMSBtn) {
+            elements.sendSMSBtn.addEventListener('click', function() {
+                if (!elements.phoneInput || !elements.verificationStep) return;
+                
+                const phoneNumber = elements.phoneInput.value;
+                if (!phoneNumber) {
+                    showNotification('Please enter a valid phone number', 'error');
+                    return;
+                }
+                
+                sendOTP('sms', phoneNumber);
+            });
+        }
+        
+        if (elements.sendEmailBtn) {
+            elements.sendEmailBtn.addEventListener('click', function() {
+                if (!elements.emailInput || !elements.verificationStep) return;
+                
+                const emailAddress = elements.emailInput.value;
+                if (!emailAddress) {
+                    showNotification('Please enter a valid email address', 'error');
+                    return;
+                }
+                
+                sendOTP('email', emailAddress);
+            });
+        }
+        
+        // Helper function for sending OTP
+        function sendOTP(method, destination) {
+            // Show loading state
+            const btnElement = method === 'sms' ? elements.sendSMSBtn : elements.sendEmailBtn;
+            if (btnElement) {
+                const originalText = btnElement.textContent;
+                btnElement.textContent = 'Sending...';
+                btnElement.disabled = true;
+            }
+            
+            fetch('/api/send-otp', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ method, destination })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (btnElement) {
+                    btnElement.textContent = btnElement === elements.sendSMSBtn ? 'Send Verification Code' : 'Send Verification Code';
+                    btnElement.disabled = false;
+                }
+                
+                if (data.success) {
+                    showNotification('Verification code sent successfully', 'success');
+                    if (elements.verificationStep) {
+                        elements.verificationStep.style.display = 'block';
+                        // Focus on first input
+                        if (elements.otpInputs && elements.otpInputs.length) {
+                            elements.otpInputs[0].focus();
+                        }
+                    }
+                } else {
+                    showNotification(data.message || 'Failed to send verification code', 'error');
+                }
+            })
+            .catch(error => {
+                if (btnElement) {
+                    btnElement.textContent = btnElement === elements.sendSMSBtn ? 'Send Verification Code' : 'Send Verification Code';
+                    btnElement.disabled = false;
+                }
+                showNotification('An error occurred. Please try again.', 'error');
+                console.error('Error:', error);
+            });
+        }
+        
+        // Handle OTP inputs with optimized events
+        if (elements.otpInputs && elements.otpInputs.length) {
+            // Use one event handler for all inputs
+            elements.otpInputs.forEach((input, index) => {
+                input.addEventListener('input', function(e) {
+                    // Allow only single digit
+                    if (this.value.length > 1) {
+                        this.value = this.value.slice(0, 1);
+                    }
+                    
+                    // Move to next input if value exists
+                    if (this.value && index < elements.otpInputs.length - 1) {
+                        elements.otpInputs[index + 1].focus();
+                    }
+                });
+                
+                // Handle backspace
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Backspace' && !this.value && index > 0) {
+                        elements.otpInputs[index - 1].focus();
+                    }
+                });
+            });
+            
+            // Handle paste event on first input only
+            elements.otpInputs[0].addEventListener('paste', function(e) {
+                e.preventDefault();
+                const pasteData = e.clipboardData.getData('text/plain').trim();
+                if (/^\d{6}$/.test(pasteData)) {
+                    for (let i = 0; i < Math.min(6, pasteData.length); i++) {
+                        elements.otpInputs[i].value = pasteData[i] || '';
+                    }
+                    // Focus on the last filled input
+                    elements.otpInputs[Math.min(5, pasteData.length - 1)].focus();
+                }
+            });
+        }
+        
+        // Verify OTP code
+        if (elements.verifyBtn) {
+            elements.verifyBtn.addEventListener('click', function() {
+                if (!elements.otpInputs) return;
+                
+                // Show loading state
+                const originalText = elements.verifyBtn.textContent;
+                elements.verifyBtn.textContent = 'Verifying...';
+                elements.verifyBtn.disabled = true;
+                
+                // Collect OTP code
+                let otpCode = '';
+                elements.otpInputs.forEach(input => {
+                    otpCode += input.value;
+                });
+                
+                if (otpCode.length !== 6) {
+                    showNotification('Please enter a valid 6-digit code', 'error');
+                    elements.verifyBtn.textContent = originalText;
+                    elements.verifyBtn.disabled = false;
+                    return;
+                }
+                
+                // Get selected method and destination
+                const method = document.querySelector('input[name="otpMethod"]:checked').value;
+                const destination = method === 'sms' 
+                    ? elements.phoneInput?.value
+                    : elements.emailInput?.value;
+                
+                if (!destination) {
+                    showNotification('Invalid destination', 'error');
+                    elements.verifyBtn.textContent = originalText;
+                    elements.verifyBtn.disabled = false;
+                    return;
+                }
+                
+                // Show global loading
+                window.showLoading('Verifying your authentication code...');
+                
+                // Send verification request
+                fetch('/api/verify-otp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        method,
+                        destination,
+                        code: otpCode
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    window.hideLoading();
+                    elements.verifyBtn.textContent = originalText;
+                    elements.verifyBtn.disabled = false;
+                    
+                    if (data.success) {
+                        showNotification('OTP Authentication has been enabled', 'success');
+                        setTimeout(() => window.location.reload(), 1000);
+                    } else {
+                        showNotification(data.message || 'Invalid verification code', 'error');
+                    }
+                })
+                .catch(error => {
+                    window.hideLoading();
+                    elements.verifyBtn.textContent = originalText;
+                    elements.verifyBtn.disabled = false;
+                    showNotification('An error occurred. Please try again.', 'error');
+                    console.error('Error:', error);
+                });
+            });
+        }
+        
+        // Change OTP method
+        if (elements.changeMethodBtn) {
+            elements.changeMethodBtn.addEventListener('click', function() {
+                if (elements.disableOTPModal) elements.disableOTPModal.style.display = 'none';
+                if (elements.enableOTPModal) elements.enableOTPModal.style.display = 'block';
+            });
+        }
+        
+        // Close modals when clicking outside - use one handler for performance
+        window.addEventListener('click', function(event) {
+            if (event.target === elements.enableOTPModal) {
+                elements.enableOTPModal.style.display = 'none';
+                resetOTPForm();
+            } else if (event.target === elements.disableOTPModal) {
+                elements.disableOTPModal.style.display = 'none';
+            }
+        }, { passive: true });
+        
+        // Reset OTP form
+        function resetOTPForm() {
+            if (!elements.smsRadio || !elements.emailRadio) return;
+            
+            elements.smsRadio.checked = true;
+            elements.emailRadio.checked = false;
+            
+            if (elements.smsForm) elements.smsForm.classList.add('active');
+            if (elements.emailForm) elements.emailForm.classList.remove('active');
+            if (elements.verificationStep) elements.verificationStep.style.display = 'none';
+            
+            // Clear input fields
+            if (elements.phoneInput) elements.phoneInput.value = '';
+            
+            // Clear OTP inputs
+            if (elements.otpInputs) {
+                elements.otpInputs.forEach(input => {
+                    input.value = '';
+                });
+            }
+        }
+    });
+
+    // Optimized notification function
+    function showNotification(message, type) {
+        // Check if there's already a notification
+        const existingNotification = document.querySelector('.notification');
+        if (existingNotification) {
+            // Remove existing notification first
+            existingNotification.remove();
+        }
+        
+        // Create notification with optimized DOM operations
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.textContent = message;
+        
+        // Append to body
+        document.body.appendChild(notification);
+        
+        // Use requestAnimationFrame for smoother animations
+        requestAnimationFrame(() => {
+            notification.classList.add('show');
+        });
+        
+        // Remove after delay
+        setTimeout(() => {
+            notification.classList.remove('show');
+            notification.classList.add('hide');
+            
+            // Remove from DOM after animation
+            notification.addEventListener('transitionend', () => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, { once: true });
+        }, 3000);
+    }
+</script>
+
 <style>
-.profile-container {
-    max-width: 1200px;
-    margin: 2rem auto;
-    padding: 2rem;
-}
+    /* Optimized CSS */
+    .camera-container {
+        position: relative;
+        width: 100%;
+        overflow: hidden;
+    border-radius: 8px;
+        background-color: #000;
+        aspect-ratio: 4/3; /* Fixed aspect ratio prevents layout shift */
+    }
+    
+    .camera-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        pointer-events: none;
+    }
+    
+    .face-outline {
+        width: 200px;
+        height: 200px;
+        border: 2px dashed rgba(255, 255, 255, 0.7);
+        border-radius: 50%;
+        /* Hardware acceleration */
+        will-change: transform;
+        transform: translateZ(0);
+    }
+    
+    #faceCanvas {
+        width: 100%;
+        display: none; /* Initially hidden */
+    }
+    
+    /* Optimized notification system */
+    .notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 25px;
+        border-radius: 4px;
+        color: white;
+        font-weight: 500;
+        z-index: 9999;
+        opacity: 0;
+        transform: translateY(-20px);
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        max-width: 300px;
+        will-change: transform, opacity;
+    }
+    
+    .notification.show {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    
+    .notification.hide {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    
+    .notification-success {
+        background-color: #4CAF50;
+    }
+    
+    .notification-error {
+        background-color: #F44336;
+    }
 
-.profile-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 2rem;
-    margin-top: 2rem;
-}
+    /* Optimized OTP Modal Styles */
+    .otp-setup-container {
+        margin-top: 1.5rem;
+    }
 
-.profile-card, .stats-card, .activity-card {
-    background: rgba(30, 40, 60, 0.8);
-    backdrop-filter: blur(10px);
-    border-radius: 10px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-}
+    .otp-method-selection {
+        margin-bottom: 1.5rem;
+    }
 
-.profile-card h3, .stats-card h3, .activity-card h3 {
-    color: #fff;
-    margin-bottom: 1.5rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.profile-info {
+    .radio-group {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+        margin-top: 1rem;
 }
 
-.info-item {
+    .radio-container {
     display: flex;
-    justify-content: space-between;
-    padding: 0.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.info-item:last-child {
-    border-bottom: none;
-}
-
-.label {
-    color: #9e9e9e;
-    font-weight: 500;
-}
-
-.value {
-    color: #fff;
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem;
-}
-
-.stat-item {
-    text-align: center;
-    padding: 1rem;
-    background: rgba(0, 0, 0, 0.2);
+        flex-direction: column;
+        padding: 1rem;
     border-radius: 8px;
-}
+        background: rgba(255, 255, 255, 0.05);
+        cursor: pointer;
+        position: relative;
+        transition: background-color 0.2s ease;
+    }
 
-.stat-value {
-    font-size: 1.5rem;
-    font-weight: bold;
-    color: #2196F3;
-}
+    .radio-container:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
 
-.stat-label {
-    font-size: 0.9rem;
-    color: #9e9e9e;
-}
+    .radio-container input[type="radio"] {
+        position: absolute;
+        right: 1rem;
+        top: 1rem;
+    }
 
-.activity-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.activity-item {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.5rem;
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 8px;
-}
-
-.activity-icon {
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(33, 150, 243, 0.2);
-    border-radius: 50%;
-    color: #2196F3;
-}
-
-.activity-details {
-    flex: 1;
-}
-
-.activity-action {
+    .radio-label {
+        font-weight: bold;
     color: #fff;
-    font-weight: 500;
+        margin-bottom: 0.5rem;
 }
 
-.activity-time {
-    font-size: 0.8rem;
+    .radio-description {
+        font-size: 0.9rem;
     color: #9e9e9e;
 }
 
-.activity-status {
-    padding: 0.25rem 0.5rem;
+    .setup-form {
+        display: none;
+        margin-top: 1.5rem;
+    }
+
+    .setup-form.active {
+        display: block;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        color: #fff;
+    }
+
+    .form-group input {
+        width: 100%;
+        padding: 0.75rem;
     border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(0, 0, 0, 0.2);
+        color: #fff;
+    }
+
+    .form-help {
     font-size: 0.8rem;
+        color: #9e9e9e;
+        margin-top: 0.5rem;
+    }
+
+    /* Performance optimized button styles with GPU acceleration */
+    .btn-primary, .btn-secondary, .btn-danger {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
     font-weight: 500;
-}
+        transition: background-color 0.2s ease;
+        will-change: transform;
+        transform: translateZ(0);
+    }
 
-.status-success {
-    background: rgba(76, 175, 80, 0.2);
-    color: #4CAF50;
-}
+    .btn-primary {
+        background: #2196F3;
+        color: white;
+    }
 
-.status-failed {
-    background: rgba(244, 67, 54, 0.2);
-    color: #F44336;
-}
+    .btn-primary:hover {
+        background: #1976D2;
+    }
+    
+    .btn-secondary {
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+    }
 
-.status-pending {
-    background: rgba(255, 152, 0, 0.2);
-    color: #FF9800;
-}
+    .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.2);
+    }
 
-.activity-message {
-    width: 100%;
+    .btn-danger {
+        background: #f44336;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background: #d32f2f;
+    }
+    
+    .btn-disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+    .verification-step {
+        display: none;
+        margin-top: 1.5rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Optimized OTP input styles */
+    .code-input-group {
     display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
     justify-content: center;
+    }
+
+    .otp-input {
+        width: 3rem;
+        height: 3rem;
+        text-align: center;
+        font-size: 1.25rem;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(0, 0, 0, 0.2);
+        color: #fff;
+        caret-color: #2196F3;
+    }
+
+    .otp-input:focus {
+        outline: none;
+        border-color: #2196F3;
+        box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.3);
+    }
+
+    .otp-management {
+        margin-top: 1.5rem;
+    }
+
+    .otp-status-info {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 8px;
     padding: 1rem;
-}
+        margin-bottom: 1.5rem;
+    }
 
-.btn-view-all {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem 1.5rem;
-    background: rgba(33, 150, 243, 0.15);
-    color: #2196F3;
-    border: 1px solid rgba(33, 150, 243, 0.3);
-    border-radius: 20px;
-    font-weight: 500;
-    text-decoration: none;
-    transition: all 0.3s ease;
-}
-
-.btn-view-all:hover {
-    background: rgba(33, 150, 243, 0.25);
-    transform: translateY(-2px);
+    .management-actions {
+        display: flex;
+        gap: 1rem;
+    }
+    
+    /* Add support for reduced motion preferences */
+    @media (prefers-reduced-motion: reduce) {
+        .notification, .notification.show, .notification.hide,
+        .btn-primary, .btn-secondary, .btn-danger {
+            transition: none;
+        }
 }
 </style>
 {% endblock %} 

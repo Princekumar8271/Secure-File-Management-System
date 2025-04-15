@@ -3,67 +3,112 @@
 {% block title %}Shared Files{% endblock %}
 
 {% block content %}
-<div class="encryption-dashboard">
-    <h2>Files Shared With Me</h2>
+<div class="encryption-dashboard max-w-7xl mx-auto px-4">
+    <h2 class="text-center text-3xl font-bold mb-8 bg-gradient-to-r from-purple-500 to-blue-500 bg-clip-text text-transparent drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]">Files Shared With Me</h2>
     
-    <div class="encryption-container">
-        <div class="encrypted-files">
-            <h3>Shared Encrypted Files</h3>
-            <div class="files-grid">
-                {% if shared_files %}
-                    {% for file in shared_files %}
-                    <div class="file-card shared-file-card">
-                        <div class="file-info">
-                            <span class="file-name">{{ file.filename }}</span>
-                            <span class="encryption-date">{{ file.date }}</span>
+    <div class="glass-card blue-glow backdrop-blur-xl p-8 rounded-xl border border-purple-500/20 shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-300 flex flex-col">
+        <h3 class="text-2xl font-bold mb-6">Shared Encrypted Files</h3>
+        
+        {% if shared_files %}
+        <div class="space-y-4 flex-grow overflow-y-auto max-h-[600px] pr-2">
+            {% for file in shared_files %}
+            <div class="glass-inner p-4 rounded-lg border border-white/10 transition-all duration-300 hover:-translate-y-1">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-white font-medium text-lg">{{ file.filename }}</span>
+                    <span class="text-white/60 text-sm">{{ file.date }}</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="flex flex-col space-y-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-purple-400"><i class="fas fa-user-shield"></i></span>
+                            <span class="text-white/70">Shared by:</span>
+                            <span class="text-white">{{ file.owner }}</span>
                         </div>
-                        <div class="owner-info">
-                            <span class="owner-label">Shared by:</span>
-                            <span class="owner-name">{{ file.owner }}</span>
-                        </div>
-                        <div class="permission-info">
-                            <span class="permission-label">Permission:</span>
-                            <span class="permission-badge permission-{{ file.permission }}">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-blue-400"><i class="fas fa-key"></i></span>
+                            <span class="text-white/70">Permission:</span>
+                            <span class="bg-blue-900/30 text-blue-400 px-2 py-1 rounded-full text-xs font-semibold">
                                 {{ file.permission|capitalize }}
                             </span>
                         </div>
-                        <div class="share-timing">
-                            <span class="granted-label">Shared on:</span>
-                            <span class="granted-date">{{ file.granted_at }}</span>
-                            <br>
-                            <span class="expires-label">Expires:</span>
-                            <span class="expires-date">{{ file.expires_at }}</span>
+                    </div>
+                    <div class="flex flex-col space-y-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-green-400"><i class="fas fa-calendar-check"></i></span>
+                            <span class="text-white/70">Shared on:</span>
+                            <span class="text-white">{{ file.granted_at }}</span>
                         </div>
-                        <div class="encryption-details">
-                            <span class="encryption-status">
-                                <i class="fas fa-lock"></i> Encrypted
-                            </span>
-                            <span class="encryption-level">
-                                {{ file.encryption_level }}
-                            </span>
-                        </div>
-                        <div class="file-actions">
-                            <a href="{{ url_for('download_file', file_id=file.id) }}" class="btn btn-secondary">
-                                <i class="fas fa-download"></i> Download
-                            </a>
-                            <form action="{{ url_for('decrypt_file', file_id=file.id) }}" method="POST" class="decrypt-form">
-                                <button type="button" class="btn btn-success decrypt-btn" data-file-id="{{ file.id }}" data-file-name="{{ file.filename }}">
-                                    <i class="fas fa-unlock"></i> Decrypt
-                                </button>
-                            </form>
-                            {% if file.permission == 'admin' %}
-                            <a href="{{ url_for('share_file', file_id=file.id) }}" class="btn btn-info share-btn" data-file-id="{{ file.id }}">
-                                <i class="fas fa-share-alt"></i> Share
-                            </a>
-                            {% endif %}
+                        <div class="flex items-center space-x-2">
+                            <span class="text-orange-400"><i class="fas fa-hourglass-half"></i></span>
+                            <span class="text-white/70">Expires:</span>
+                            <span class="text-white">{{ file.expires_at }}</span>
                         </div>
                     </div>
-                    {% endfor %}
-                {% else %}
-                    <p class="no-files">No files have been shared with you yet</p>
-                {% endif %}
+                </div>
+                <div class="flex items-center space-x-3 mb-4">
+                    <span class="bg-green-900/30 text-green-400 px-2 py-1 rounded-full text-xs font-semibold flex items-center">
+                        <i class="fas fa-lock mr-1"></i> Encrypted
+                    </span>
+                    <span class="bg-blue-900/30 text-blue-400 px-2 py-1 rounded-full text-xs font-semibold">
+                        {{ file.encryption_level }}
+                    </span>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    <a href="{{ url_for('download_file', file_id=file.id) }}" class="inline-flex justify-center items-center px-3 py-2 bg-blue-600/40 hover:bg-blue-600/60 text-blue-300 rounded-lg transition-colors duration-300 text-sm">
+                        <i class="fas fa-download mr-2"></i> Download
+                    </a>
+                    <form action="{{ url_for('decrypt_shared_file', file_id=file.id) }}" method="POST" class="decrypt-form">
+                        <button type="button" class="w-full inline-flex justify-center items-center px-3 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded-lg transition-colors duration-300 text-sm decrypt-btn" data-file-id="{{ file.id }}" data-file-name="{{ file.filename }}">
+                            <i class="fas fa-unlock mr-2"></i> Decrypt
+                        </button>
+                        <input type="hidden" name="password" class="decrypt-password-input">
+                    </form>
+                    {% if file.permission == 'admin' %}
+                    <a href="{{ url_for('share_file', file_id=file.id) }}" class="inline-flex justify-center items-center px-3 py-2 bg-purple-600/40 hover:bg-purple-600/60 text-purple-300 rounded-lg transition-colors duration-300 text-sm share-btn" data-file-id="{{ file.id }}">
+                        <i class="fas fa-share-alt mr-2"></i> Share
+                    </a>
+                    {% endif %}
+                </div>
             </div>
+            {% endfor %}
         </div>
+        {% else %}
+        <div class="flex-grow flex flex-col items-center justify-center py-14">
+            <div class="icon-container animate-pulse mb-6">
+                <i class="fas fa-share-alt text-7xl text-indigo-400/40"></i>
+            </div>
+            <p class="text-white/60 text-center text-lg mb-2">No files shared yet</p>
+            <p class="text-white/40 text-center text-sm max-w-md mx-auto">When someone shares encrypted files with you, they'll appear here</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add a password modal for decryption -->
+<div id="decryptModal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 backdrop-blur-sm">
+    <div class="p-6 rounded-xl border border-red-500/20 bg-black/80 backdrop-blur-xl w-full max-w-md transform transition-all duration-300 scale-95">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold text-white/90">Enter Decryption Password</h3>
+            <button type="button" class="text-white/70 hover:text-white" id="closeDecryptModal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <p class="text-white/70 mb-4">Please enter the password to decrypt <span id="decryptFileName" class="font-semibold text-red-400"></span></p>
+        <div class="text-sm text-white/50 mb-4">
+            <p>This file was shared with you by the owner. You'll need the correct password to decrypt it.</p>
+        </div>
+        <form id="decryptModalForm" class="space-y-4">
+            <div class="relative">
+                <input type="password" id="decryptPassword" class="w-full p-3 bg-black/40 border border-red-500/30 focus:border-red-500/50 rounded-lg text-white placeholder-white/40 outline-none" placeholder="Enter password" required>
+                <button type="button" id="togglePassword" class="absolute right-3 top-3 text-white/50 hover:text-white/80">
+                    <i class="fas fa-eye"></i>
+                </button>
+            </div>
+            <div class="flex space-x-3">
+                <button type="button" id="cancelDecrypt" class="w-1/2 py-2 px-4 bg-gray-800/80 hover:bg-gray-700/80 text-white rounded-lg transition-all duration-300">Cancel</button>
+                <button type="submit" id="confirmDecrypt" class="w-1/2 py-2 px-4 bg-gradient-to-r from-red-500/80 to-red-600/80 hover:from-red-500/90 hover:to-red-600/90 text-white rounded-lg transition-all duration-300">Decrypt</button>
+            </div>
+        </form>
     </div>
 </div>
 {% endblock %}
@@ -73,33 +118,143 @@
     document.addEventListener('DOMContentLoaded', function() {
         // Handle decrypt button clicks
         const decryptButtons = document.querySelectorAll('.decrypt-btn');
+        let currentDecryptForm = null;
+        let currentFileId = null;
+        let currentFileName = null;
+        
         decryptButtons.forEach(button => {
             button.addEventListener('click', function() {
                 const fileId = this.getAttribute('data-file-id');
                 const fileName = this.getAttribute('data-file-name');
+                currentDecryptForm = this.closest('form');
+                currentFileId = fileId;
+                currentFileName = fileName;
                 
-                if (confirm(`Are you sure you want to decrypt "${fileName}"? Only authorized users can perform this action.`)) {
-                    // Show loading indicator
-                    this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Decrypting...';
-                    this.disabled = true;
-                    
-                    // Submit the form
-                    this.closest('form').submit();
-                }
+                // Show password modal
+                const decryptModal = document.getElementById('decryptModal');
+                const decryptFileName = document.getElementById('decryptFileName');
+                decryptFileName.textContent = fileName;
+                decryptModal.classList.remove('hidden');
+                decryptModal.querySelector('.scale-95').classList.replace('scale-95', 'scale-100');
+                document.getElementById('decryptPassword').focus();
             });
+        });
+        
+        // Handle password modal events
+        const decryptModal = document.getElementById('decryptModal');
+        const closeDecryptModal = document.getElementById('closeDecryptModal');
+        const cancelDecrypt = document.getElementById('cancelDecrypt');
+        const decryptModalForm = document.getElementById('decryptModalForm');
+        const togglePassword = document.getElementById('togglePassword');
+        const passwordInput = document.getElementById('decryptPassword');
+        
+        // Close modal function
+        function closeModal() {
+            const modalContent = decryptModal.querySelector('.scale-100');
+            if (modalContent) {
+                modalContent.classList.replace('scale-100', 'scale-95');
+            }
+            decryptModal.classList.add('hidden');
+            passwordInput.value = '';
+        }
+        
+        // Close button
+        closeDecryptModal.addEventListener('click', closeModal);
+        
+        // Cancel button
+        cancelDecrypt.addEventListener('click', closeModal);
+        
+        // Close on outside click
+        decryptModal.addEventListener('click', function(e) {
+            if (e.target === decryptModal) {
+                closeModal();
+            }
+        });
+        
+        // Toggle password visibility
+        togglePassword.addEventListener('click', function() {
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+            this.innerHTML = type === 'password' ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
+        });
+        
+        // Replace the decrypt modal form handler with one that uses the global loading
+        decryptModalForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const password = passwordInput.value.trim();
+            
+            if (!password) {
+                if (window.showNotification) {
+                    window.showNotification('Please enter the decryption password', 'error');
+                } else {
+                    alert('Please enter the decryption password');
+                }
+                return;
+            }
+            
+            if (currentDecryptForm) {
+                // Get the hidden password input or create one if it doesn't exist
+                let passwordField = currentDecryptForm.querySelector('.decrypt-password-input');
+                if (!passwordField) {
+                    passwordField = document.createElement('input');
+                    passwordField.type = 'hidden';
+                    passwordField.name = 'password';
+                    passwordField.className = 'decrypt-password-input';
+                    currentDecryptForm.appendChild(passwordField);
+                }
+                
+                // Set the password value
+                passwordField.value = password;
+                
+                // Close the modal
+                closeModal();
+                
+                // Show loading indicator if available
+                if (window.showLoading) {
+                    window.showLoading('Decrypting shared file...');
+                }
+                
+                // Submit the form after a short delay to ensure UI updates
+                setTimeout(function() {
+                    // Debug log - check form state before submission
+                    console.log('Submitting decrypt form', currentDecryptForm);
+                    console.log('Password field value set:', passwordField.value);
+                    
+                    // Ensure the form is directly submitted to bypass any issues
+                    currentDecryptForm.submit();
+                }, 100);
+            } else {
+                if (window.showNotification) {
+                    window.showNotification('Error: Could not find the decrypt form', 'error');
+                } else {
+                    alert('Error: Could not find the decrypt form');
+                }
+            }
+        });
+        
+        // Add a direct click handler to the confirm button
+        document.getElementById('confirmDecrypt').addEventListener('click', function(e) {
+            // Prevent the default button behavior
+            e.preventDefault();
+            
+            // Manually trigger form submission
+            const event = new Event('submit', {
+                'bubbles': true,
+                'cancelable': true
+            });
+            decryptModalForm.dispatchEvent(event);
         });
         
         // Handle share button clicks (only for admin permissions)
         const shareButtons = document.querySelectorAll('.share-btn');
         shareButtons.forEach(button => {
             button.addEventListener('click', function(e) {
-                console.log("Share button clicked for file ID:", this.getAttribute('data-file-id'));
-                // No need to prevent default as we want the link to work normally
                 // Just add some visual feedback when clicked
-                this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opening...';
+                this.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Opening...';
                 // The link will automatically navigate to the share page
             });
         });
     });
 </script>
-{% endblock %} 
+{% endblock %}

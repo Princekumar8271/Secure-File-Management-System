@@ -3,29 +3,321 @@
 {% block title %}Login - Secure File Manager{% endblock %}
 
 {% block content %}
-<div class="auth-container enhanced">
-    <h2>Login</h2>
-    {% if error %}
-    <div class="alert alert-error">{{ error }}</div>
-    {% endif %}
-    <form method="post" action="{{ url_for('login') }}">
-        <div class="form-group">
-            <label for="username">Username</label>
-            <i class="fas fa-user form-group-icon"></i>
-            <input type="text" id="username" name="username" required autocomplete="username">
+<div class="max-w-2xl mx-auto mt-12 mb-8 p-8 rounded-xl 
+     bg-black/40
+     backdrop-blur-2xl border border-red-500/20 shadow-xl text-white 
+     transition-all duration-500 flex flex-col 
+     hover:shadow-red-500/10 hover:border-red-500/30 transform hover:scale-[1.01]">
+    
+    <div class="text-center mb-6">
+        <h2 class="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-400 mb-2 drop-shadow-[0_0_15px_rgba(255,0,0,0.6)]">Welcome Back</h2>
+        <p class="text-gray-300 text-base mt-2">Secure your files with advanced encryption</p>
+    </div>
+    
+    <!-- Flash messages removed as requested -->
+    
+    <!-- Tab Navigation -->
+    <div class="flex border-b border-slate-700/50 mb-6 relative overflow-hidden">
+        <div>
+            <button id="password-tab" class="tab-button w-full py-3 px-5 font-medium border-b-2 border-red-500 text-red-400 text-base relative z-10 transition-all duration-300" onclick="switchTab('password')">
+                <i class="fas fa-key mr-2 text-sm"></i>Password Login
+            </button>
         </div>
-        <div class="form-group">
-            <label for="password">Password</label>
-            <i class="fas fa-lock form-group-icon"></i>
-            <input type="password" id="password" name="password" required autocomplete="current-password">
+        <div>
+            <button id="face-tab" class="tab-button w-full py-3 px-5 font-medium text-gray-400 hover:text-gray-200 border-b-2 border-transparent text-base relative z-10 transition-all duration-300" onclick="switchTab('face')">
+                <i class="fas fa-user-circle mr-2 text-sm"></i>Face Login
+            </button>
         </div>
-        <div class="forgot-password">
-            <a href="{{ url_for('forgot_password') }}">Forgot Password?</a>
+        <div id="tab-indicator" class="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-red-500 via-red-400 to-orange-500 w-1/2 transition-all duration-300 rounded-full"></div>
+    </div>
+    
+    <!-- Password Login Form -->
+    <div id="password-form" class="tab-content px-6 flex-grow flex flex-col animate-fadeIn">
+        <form method="POST" action="{{ url_for('login') }}" class="flex flex-col gap-6 flex-grow max-w-md mx-auto w-full">
+            <input type="hidden" name="login_method" value="password">
+            
+            <div class="flex flex-col gap-2">
+                <label for="password-username" class="font-medium text-gray-300 text-base flex items-center">
+                    <span class="text-red-400 mr-2"><i class="fas fa-user-shield"></i></span>
+                    Username
+                </label>
+                <div class="relative group">
+                    <input type="text" id="password-username" name="username" required
+                        {% if require_password %}value="{{ username }}" readonly{% endif %}
+                        class="p-3 rounded-md bg-black/50 border border-red-500/20 text-white focus:outline-none focus:ring-1 focus:ring-red-500/40 focus:border-red-500/40 text-base w-full transition-all duration-300 hover:bg-black/60 hover:border-red-500/30 backdrop-blur-md">
+                    <div class="absolute inset-0 rounded-md bg-gradient-to-r from-red-600/10 to-orange-600/5 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-300"></div>
+                </div>
+            </div>
+            
+            <div class="flex flex-col gap-2">
+                <label for="password" class="font-medium text-gray-300 text-base flex items-center">
+                    <span class="text-red-400 mr-2"><i class="fas fa-lock"></i></span>
+                    Password
+                </label>
+                <div class="relative group">
+                    <input type="password" id="password" name="password" required
+                        class="p-3 rounded-md bg-black/50 border border-red-500/20 text-white focus:outline-none focus:ring-1 focus:ring-red-500/40 focus:border-red-500/40 text-base w-full transition-all duration-300 hover:bg-black/60 hover:border-red-500/30 backdrop-blur-md">
+                    <div class="absolute inset-0 rounded-md bg-gradient-to-r from-red-600/10 to-orange-600/5 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-300"></div>
+                </div>
+            </div>
+            
+            {% if require_password %}
+            <div class="p-4 bg-blue-500/10 rounded-md mt-2 mb-2 border border-blue-500/10 transform hover:scale-[1.02] transition-all duration-300 backdrop-blur-md">
+                <p class="text-blue-400 flex items-start text-base">
+                    <i class="fas fa-shield-alt mt-1 mr-3 animate-pulse text-sm"></i>
+                    <span>Multi-factor authentication: Please enter your password to continue to face verification.</span>
+                </p>
+            </div>
+            <input type="hidden" name="face_login_pending" value="true">
+            {% endif %}
+            
+            <div class="mt-4 relative group">
+                <button type="submit" id="password-login-btn"
+                    class="w-full py-3 px-6 bg-gradient-to-r from-red-500/80 to-red-600/80 hover:from-red-500/90 hover:to-red-600/90 text-white font-semibold rounded-md shadow-md hover:shadow-red-500/20 transition duration-300 transform hover:-translate-y-1 hover:scale-[1.02] text-base relative overflow-hidden z-10 backdrop-blur-sm">
+                    <div class="absolute inset-0 w-full h-full bg-gradient-to-r from-red-600/60 to-red-300/10 opacity-0 group-hover:opacity-10 transition-opacity duration-300"></div>
+                    <div class="absolute inset-0 w-0 bg-gradient-to-r from-orange-500/30 to-red-500/10 z-0 group-hover:w-full transition-all duration-1000 rounded-md"></div>
+                    <span class="relative z-10 flex items-center justify-center">
+                        <i class="fas fa-sign-in-alt mr-2"></i>
+                        <span id="pwd-btn-text">{% if require_password %}Continue with Password{% else %}Login with Password{% endif %}</span>
+                        <span id="pwd-spinner" class="hidden ml-2">
+                            <i class="fas fa-circle-notch fa-spin"></i>
+                        </span>
+                    </span>
+                </button>
+            </div>
+            
+            <div class="flex justify-between text-base mt-5">
+                <a href="{{ url_for('forgot_password') }}" class="text-red-400 hover:text-red-300 transition transform hover:translate-x-1 group relative">
+                    <span class="relative z-10">Forgot Password?</span>
+                    <span class="absolute left-0 bottom-0 w-0 h-0.5 bg-gradient-to-r from-red-500 to-orange-500 transition-all duration-300 group-hover:w-full"></span>
+                </a>
+                <a href="{{ url_for('register') }}" class="text-red-400 hover:text-red-300 transition transform hover:translate-x-1 group relative">
+                    <span class="relative z-10">Create Account</span>
+                    <span class="absolute left-0 bottom-0 w-0 h-0.5 bg-gradient-to-r from-red-500 to-orange-500 transition-all duration-300 group-hover:w-full"></span>
+                </a>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Face Login Form -->
+    <div id="face-form" class="tab-content hidden px-6 flex-grow flex flex-col animate-fadeIn">
+        <div class="p-4 rounded-md mb-5 border border-red-500/20 bg-black/40 transform hover:scale-[1.02] transition-all duration-300 max-w-md mx-auto w-full backdrop-blur-xl">
+            <p class="text-red-400 flex items-start text-sm">
+                <i class="fas fa-info-circle mt-1 mr-2 animate-pulse text-sm"></i>
+                <span>Enter your username to verify with face recognition.</span>
+            </p>
         </div>
-        <button type="submit" class="glow-button">Login</button>
-    </form>
-    <p style="text-align: center; margin-top: 1.5rem; color: #e0e0e0;">
-        Don't have an account? <a href="{{ url_for('register') }}" class="register-link">Register</a>
-    </p>
+        
+        <form action="{{ url_for('login') }}" method="POST" class="face-login-form flex flex-col gap-6 flex-grow max-w-md mx-auto w-full">
+            <input type="hidden" name="login_method" value="face">
+            
+            <div class="flex flex-col gap-2">
+                <label for="face-username" class="font-medium text-gray-300 text-base flex items-center">
+                    <span class="text-red-400 mr-2"><i class="fas fa-user-shield"></i></span>
+                    Username
+                </label>
+                <div class="relative group">
+                    <input type="text" id="face-username" name="username" required
+                           class="p-3 rounded-md bg-black/50 border border-red-500/20 text-white focus:outline-none focus:ring-1 focus:ring-red-500/40 focus:border-red-500/40 text-base w-full transition-all duration-300 hover:bg-black/60 hover:border-red-500/30 backdrop-blur-md">
+                    <div class="absolute inset-0 rounded-md bg-gradient-to-r from-red-600/10 to-orange-600/5 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-300"></div>
+                </div>
+            </div>
+            
+            <div id="face-auth-error" class="p-4 bg-red-500/10 rounded-md mt-2 mb-2 border border-red-500/10 transform hover:scale-[1.02] transition-all duration-300 backdrop-blur-md hidden">
+                <p class="text-red-400 flex items-start text-base">
+                    <i class="fas fa-exclamation-circle mt-1 mr-3 text-sm"></i>
+                    <span>Face authentication not set up for this account. Please log in with your password first, then set up face authentication in your profile settings.</span>
+                </p>
+            </div>
+            
+            <div class="mt-4 relative group">
+                <button type="submit" id="face-login-btn"
+                    class="w-full flex items-center justify-center gap-2 py-3 px-6 bg-gradient-to-r from-red-500/80 to-orange-500/80 hover:from-red-500/90 hover:to-orange-500/90 text-white font-semibold rounded-md shadow-md hover:shadow-red-500/20 transition duration-300 transform hover:-translate-y-1 hover:scale-[1.02] text-base relative overflow-hidden backdrop-blur-sm">
+                    <span class="absolute inset-0 flex items-center justify-center">
+                        <span class="w-full h-full bg-gradient-to-r from-red-600/60 to-orange-300/10 opacity-0 group-hover:opacity-10 transition-opacity duration-300"></span>
+                    </span>
+                    <span class="absolute inset-0 w-0 bg-gradient-to-r from-orange-500/30 to-red-500/10 z-0 group-hover:w-full transition-all duration-1000 rounded-md"></span>
+                    <span class="relative z-10 flex items-center justify-center">
+                        <i class="fas fa-user-circle text-base mr-2"></i> 
+                        <span id="face-btn-text">Login with Face</span>
+                        <span id="face-spinner" class="hidden ml-2">
+                            <i class="fas fa-circle-notch fa-spin"></i>
+                        </span>
+                    </span>
+                </button>
+            </div>
+            
+            <div class="flex items-center justify-center mt-4 space-x-1">
+                <i class="fas fa-shield-alt text-xs text-red-400"></i> 
+                <span class="text-center text-xs text-gray-300">Fast & secure authentication</span>
+            </div>
+        </form>
+    </div>
+    
+    <div class="mt-6 pt-4 border-t border-slate-700/30 text-center">
+        <p class="text-gray-300 text-sm flex items-center justify-center gap-2">
+            <span>Don't have an account yet?</span>
+            <a href="{{ url_for('register') }}" class="text-red-400 hover:text-red-300 transition font-medium relative group">
+                Register here
+                <span class="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-red-500 to-orange-500 transition-all duration-300 group-hover:w-full"></span>
+            </a>
+        </p>
+    </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+    });
+    
+    // Show selected tab content
+    const activeContent = document.getElementById(tabName + '-form');
+    if (activeContent) {
+        activeContent.classList.remove('hidden');
+        // Add fade in animation
+        activeContent.classList.add('animate-fadeIn');
+    }
+    
+    // Update tab styling
+    document.querySelectorAll('.tab-button').forEach(tab => {
+        // Remove active styles
+        tab.classList.remove('text-red-400');
+        tab.classList.add('text-gray-400', 'hover:text-gray-200');
+        tab.classList.remove('border-red-500');
+        tab.classList.add('border-transparent');
+    });
+    
+    // Apply active styles to selected tab
+    const activeTab = document.getElementById(tabName + '-tab');
+    if (activeTab) {
+        activeTab.classList.remove('text-gray-400', 'hover:text-gray-200');
+        activeTab.classList.add('text-red-400');
+        activeTab.classList.remove('border-transparent');
+        activeTab.classList.add('border-red-500');
+    }
+    
+    // Move the tab indicator
+    const tabIndicator = document.getElementById('tab-indicator');
+    if (tabIndicator) {
+        if (tabName === 'password') {
+            tabIndicator.style.left = '0';
+        } else {
+            tabIndicator.style.left = '50%';
+        }
+    }
+}
+
+// Add animation classes to TailwindCSS
+if (!document.querySelector('style#custom-animations')) {
+    const style = document.createElement('style');
+    style.id = 'custom-animations';
+    style.textContent = `
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+            animation: fadeIn 0.4s ease forwards;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        .animate-pulse {
+            animation: pulse 2s infinite;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// Initialize the tabs
+document.addEventListener('DOMContentLoaded', function() {
+    // Default to password tab
+    switchTab('password');
+    
+    // Add input focus effect
+    const inputs = document.querySelectorAll('input');
+    inputs.forEach(input => {
+        input.addEventListener('focus', function() {
+            this.parentElement.classList.add('ring-1', 'ring-red-500/30');
+        });
+        input.addEventListener('blur', function() {
+            this.parentElement.classList.remove('ring-1', 'ring-red-500/30');
+        });
+    });
+    
+    // Add loading indicators to forms
+    const passwordForm = document.querySelector('.tab-content form');
+    const passwordBtn = document.getElementById('password-login-btn');
+    const pwdBtnText = document.getElementById('pwd-btn-text');
+    const pwdSpinner = document.getElementById('pwd-spinner');
+    
+    if (passwordForm && passwordBtn) {
+        passwordForm.addEventListener('submit', function() {
+            passwordBtn.disabled = true;
+            pwdBtnText.textContent = 'Logging in...';
+            pwdSpinner.classList.remove('hidden');
+        });
+    }
+    
+    const faceForm = document.querySelector('.face-login-form');
+    const faceBtn = document.getElementById('face-login-btn');
+    const faceBtnText = document.getElementById('face-btn-text');
+    const faceSpinner = document.getElementById('face-spinner');
+    
+    if (faceForm && faceBtn) {
+        faceForm.addEventListener('submit', function(e) {
+            // Check if face auth is set up via AJAX before submitting
+            const username = document.getElementById('face-username').value;
+            if (username) {
+                e.preventDefault(); // Prevent form submission
+                
+                // Show loading state
+                faceBtn.disabled = true;
+                faceBtnText.textContent = 'Checking...'; 
+                faceSpinner.classList.remove('hidden');
+                
+                // Make AJAX request to check if face auth is set up
+                fetch(`/check_face_auth?username=${encodeURIComponent(username)}`, {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.has_face_auth) {
+                        // Face auth is set up, submit the form
+                        document.getElementById('face-auth-error').classList.add('hidden');
+                        faceBtnText.textContent = 'Logging in...';
+                        faceForm.submit();
+                    } else {
+                        // Face auth not set up, show error
+                        document.getElementById('face-auth-error').classList.remove('hidden');
+                        faceBtn.disabled = false;
+                        faceBtnText.textContent = 'Login with Face';
+                        faceSpinner.classList.add('hidden');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking face auth:', error);
+                    // Fall back to normal submission
+                    faceForm.submit();
+                });
+            } else {
+                // Normal submission if no username
+                faceBtn.disabled = true;
+                faceBtnText.textContent = 'Verifying...';
+                faceSpinner.classList.remove('hidden');
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

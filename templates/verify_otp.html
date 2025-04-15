@@ -28,7 +28,7 @@
         </ol>
     </div>
     
-    <form method="post" action="{{ url_for('verify_otp', username=username) }}">
+    <form method="post" action="{{ url_for('verify_otp', username=username) }}" data-loading="true" data-loading-message="Verifying your code...">
         <div class="form-group">
             <label for="otp">One-Time Password</label>
             <i class="fas fa-key form-group-icon"></i>
